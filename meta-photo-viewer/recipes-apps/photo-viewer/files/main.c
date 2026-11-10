@@ -160,6 +160,7 @@ static int show_gif(lv_obj_t **object, lv_obj_t *parent, const char *path,
     lv_gif_set_src(*object, source);
     lv_gif_t *animation = (lv_gif_t *)*object;
     if(!animation->gif) {
+        fprintf(stderr, "photo-viewer: GIF animation decoder rejected %s\n", path);
         lv_obj_delete(*object);
         *object = NULL;
         return 0;
@@ -229,6 +230,7 @@ static void select_file(int index)
 {
     char message[192];
     image_settings_t settings;
+    int gif_file, gif_playing = 0;
     if(index < 0 || index >= file_count) return;
     if(!prepare_image(index)) return;
     image_settings_load(files[index].path, &settings);
@@ -239,20 +241,26 @@ static void select_file(int index)
     lv_image_set_src(preview_image, source);
     lv_image_set_scale(preview_image, LV_SCALE_NONE);
     lv_obj_set_pos(preview_image, 0, 0);
-    if(image_is_gif(files[index].path) &&
+    gif_file = image_is_gif(files[index].path);
+    if(gif_file &&
        show_gif(&preview_gif, preview_viewport, files[index].path,
                 &settings, PREVIEW_WIDTH, PREVIEW_HEIGHT)) {
         lv_obj_add_flag(preview_image, LV_OBJ_FLAG_HIDDEN);
         lv_gif_resume(preview_gif);
+        gif_playing = 1;
     } else {
         lv_obj_clear_flag(preview_image, LV_OBJ_FLAG_HIDDEN);
     }
     lv_label_set_text(selected_label, files[index].name);
     lv_obj_remove_state(edit_button, LV_STATE_DISABLED);
     lv_obj_set_style_bg_color(edit_button, lv_color_hex(0x7B1FA2), 0);
-    snprintf(message, sizeof(message), "%s  |  %u deg  |  %ld KB original",
-             settings.mode == IMAGE_FILL_DISPLAY ? "Fill display" : "Fit whole image",
-             settings.rotation, (long)(files[index].size / 1024));
+    if(gif_file && !gif_playing)
+        snprintf(message, sizeof(message), "GIF animation unavailable; showing first frame: %s",
+                 files[index].name);
+    else snprintf(message, sizeof(message), "%s%s  |  %u deg  |  %ld KB original",
+                  gif_file ? "GIF animation playing  |  " : "",
+                  settings.mode == IMAGE_FILL_DISPLAY ? "Fill display" : "Fit whole image",
+                  settings.rotation, (long)(files[index].size / 1024));
     set_status(message);
 }
 

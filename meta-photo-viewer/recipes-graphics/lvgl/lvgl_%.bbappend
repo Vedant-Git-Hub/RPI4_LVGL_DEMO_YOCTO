@@ -5,7 +5,7 @@ PACKAGECONFIG:remove = "drm"
 PACKAGECONFIG:append = " fbdev"
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
-SRC_URI:append = " file://0001-bmp-fix-file-open-result.patch"
+SRC_URI:append = " file://0001-bmp-fix-file-open-result.patch file://0002-gif-accept-87a-and-local-palettes.patch"
 
 # ImageMagick renders originals into temporary BMP frames for LVGL.
 do_configure:append() {

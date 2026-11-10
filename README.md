@@ -37,10 +37,11 @@ orientation, and fits it into an 800 × 480 black frame for LVGL. The
 application tries every regular file with an extension, so its file list is
 not limited to BMP or a fixed set of image suffixes. ImageMagick determines
 whether it can decode the file. Typical formats include BMP, JPEG, PNG, GIF,
-WebP, TIFF, JPEG 2000, and camera RAW. GIF89a animations play in the gallery
-preview and full-screen view, with their saved rotation and Fit/Fill settings.
-The Edit Image screen shows the first frame while choosing settings. GIF87a
-files still display as images. Available codecs
+WebP, TIFF, JPEG 2000, and camera RAW. GIF87a and GIF89a animations play in the
+gallery preview and full-screen view, with their saved rotation and Fit/Fill
+settings. The Edit Image screen shows the first frame while choosing settings.
+If the animation decoder cannot open a GIF, the status line reports this and
+the first frame remains visible. Available codecs
 depend on the built image: this profile adds WebP, JPEG 2000, and LibRaw
 support to ImageMagick's JPEG, PNG, and TIFF dependencies. AVIF, HEIC/HEIF,
 JPEG XL, and other formats require a matching decoder on the Pi.

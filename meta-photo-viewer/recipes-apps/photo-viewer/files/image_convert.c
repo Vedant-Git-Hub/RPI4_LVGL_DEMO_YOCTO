@@ -23,7 +23,8 @@ int image_is_gif(const char *path)
     FILE *stream = fopen(path, "rb");
     if(!stream) return 0;
     int result = fread(signature, 1, sizeof(signature), stream) == sizeof(signature) &&
-                 !memcmp(signature, "GIF89a", sizeof(signature));
+                 (!memcmp(signature, "GIF89a", sizeof(signature)) ||
+                  !memcmp(signature, "GIF87a", sizeof(signature)));
     fclose(stream);
     return result;
 }

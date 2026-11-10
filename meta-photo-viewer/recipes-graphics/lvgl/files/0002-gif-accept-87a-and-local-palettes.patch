@@ -1,0 +1,53 @@
+From: Photo Viewer <photo-viewer@localhost>
+Subject: [PATCH] gif: accept GIF87a and files with local palettes only
+
+GIF87a is a valid GIF version. A global color table is optional when frames
+carry their own local palettes. Keep a black fallback palette for the initial
+canvas and for malformed frames without either palette.
+
+Upstream-Status: Pending
+
+--- a/src/libs/gif/gifdec.c
++++ b/src/libs/gif/gifdec.c
+@@ -89,7 +89,7 @@
+     }
+     /* Version */
+     f_gif_read(gif_base, sigver, 3);
+-    if(memcmp(sigver, "89a", 3) != 0) {
++    if(memcmp(sigver, "89a", 3) != 0 && memcmp(sigver, "87a", 3) != 0) {
+         LV_LOG_WARN("invalid version\n");
+         goto fail;
+     }
+@@ -98,16 +98,11 @@
+     height = read_num(gif_base);
+     /* FDSZ */
+     f_gif_read(gif_base, &fdsz, 1);
+-    /* Presence of GCT */
+-    if(!(fdsz & 0x80)) {
+-        LV_LOG_WARN("no global color table\n");
+-        goto fail;
+-    }
+     /* Color Space's Depth */
+     depth = ((fdsz >> 4) & 7) + 1;
+     /* Ignore Sort Flag. */
+     /* GCT Size */
+-    gct_sz = 1 << ((fdsz & 0x07) + 1);
++    gct_sz = (fdsz & 0x80) ? 1 << ((fdsz & 0x07) + 1) : 0;
+     /* Background Color Index */
+     f_gif_read(gif_base, &bgidx, 1);
+     /* Aspect Ratio */
+@@ -124,10 +119,11 @@
+     gif->height = height;
+     gif->depth  = depth;
+     /* Read GCT */
+-    gif->gct.size = gct_sz;
+-    f_gif_read(gif, gif->gct.colors, 3 * gif->gct.size);
++    gif->gct.size = gct_sz ? gct_sz : 1;
++    if(gct_sz) f_gif_read(gif, gif->gct.colors, 3 * gct_sz);
++    else memset(gif->gct.colors, 0, 3);
+     gif->palette = &gif->gct;
+-    gif->bgindex = bgidx;
++    gif->bgindex = gct_sz && bgidx < gct_sz ? bgidx : 0;
+     gif->canvas = (uint8_t *) &gif[1];
+     gif->frame = &gif->canvas[4 * width * height];
+     if(gif->bgindex) {

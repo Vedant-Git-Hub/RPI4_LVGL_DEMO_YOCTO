@@ -5,6 +5,7 @@
 #include "image_settings.h"
 
 int image_supported_name(const char *name);
+int image_is_gif(const char *path);
 int image_convert_to_bmp(const char *source, const char *name_hint,
                          char *output, size_t output_size);
 int image_convert_to_bmp_size(const char *source, const char *name_hint,

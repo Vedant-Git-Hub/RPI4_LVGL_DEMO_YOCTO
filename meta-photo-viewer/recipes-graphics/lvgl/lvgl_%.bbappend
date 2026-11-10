@@ -13,6 +13,7 @@ do_configure:append() {
         -e 's/^#define LV_USE_FS_STDIO 0/#define LV_USE_FS_STDIO 1/' \
         -e "s/^    #define LV_FS_STDIO_LETTER .*$/    #define LV_FS_STDIO_LETTER 'A'/" \
         -e 's/^#define LV_USE_BMP 0/#define LV_USE_BMP 1/' \
+        -e 's/^#define LV_USE_GIF 0/#define LV_USE_GIF 1/' \
         "${S}/lv_conf.h"
 }
 

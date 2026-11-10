@@ -17,6 +17,17 @@ int image_supported_name(const char *name)
     return name[0] != '.' && ext && ext != name && ext[1] != '\0';
 }
 
+int image_is_gif(const char *path)
+{
+    unsigned char signature[6];
+    FILE *stream = fopen(path, "rb");
+    if(!stream) return 0;
+    int result = fread(signature, 1, sizeof(signature), stream) == sizeof(signature) &&
+                 !memcmp(signature, "GIF89a", sizeof(signature));
+    fclose(stream);
+    return result;
+}
+
 static unsigned int read_u16(const unsigned char *p)
 {
     return (unsigned int)p[0] | ((unsigned int)p[1] << 8);

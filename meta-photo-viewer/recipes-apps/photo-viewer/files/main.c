@@ -40,6 +40,7 @@ static char preview_path[128];
 static char edit_preview_path[128];
 static lv_timer_t *slideshow_timer;
 static lv_obj_t *gallery, *viewer, *file_list, *preview_image, *full_image;
+static lv_obj_t *preview_viewport, *preview_gif, *full_gif;
 static lv_obj_t *selected_label, *count_label, *status_label;
 static lv_obj_t *edit_button, *edit_screen, *edit_preview_image;
 static lv_obj_t *edit_status_label, *edit_rotation_label;
@@ -142,6 +143,50 @@ static void clear_converted(void)
     converted_index = -1;
 }
 
+static void clear_gifs(void)
+{
+    if(preview_gif) { lv_obj_delete(preview_gif); preview_gif = NULL; }
+    if(full_gif) { lv_obj_delete(full_gif); full_gif = NULL; }
+    lv_obj_clear_flag(preview_image, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(full_image, LV_OBJ_FLAG_HIDDEN);
+}
+
+static int show_gif(lv_obj_t **object, lv_obj_t *parent, const char *path,
+                    const image_settings_t *settings, int width, int height)
+{
+    char source[sizeof(files[0].path) + 3];
+    snprintf(source, sizeof(source), "A:%s", path);
+    if(!*object) *object = lv_gif_create(parent);
+    lv_gif_set_src(*object, source);
+    lv_gif_t *animation = (lv_gif_t *)*object;
+    if(!animation->gif) {
+        lv_obj_delete(*object);
+        *object = NULL;
+        return 0;
+    }
+    int original_width = animation->gif->width;
+    int original_height = animation->gif->height;
+    int rotated_width = settings->rotation % 180 ? original_height : original_width;
+    int rotated_height = settings->rotation % 180 ? original_width : original_height;
+    if(rotated_width <= 0 || rotated_height <= 0) {
+        lv_obj_delete(*object);
+        *object = NULL;
+        return 0;
+    }
+    uint32_t xscale = (uint32_t)((int64_t)width * 256 / rotated_width);
+    uint32_t yscale = (uint32_t)((int64_t)height * 256 / rotated_height);
+    uint32_t scale = settings->mode == IMAGE_FILL_DISPLAY ?
+                     (xscale > yscale ? xscale : yscale) :
+                     (xscale < yscale ? xscale : yscale);
+    if(scale == 0) scale = 1;
+    lv_image_set_pivot(*object, original_width / 2, original_height / 2);
+    lv_image_set_rotation(*object, (int32_t)settings->rotation * 10);
+    lv_image_set_scale(*object, scale);
+    lv_obj_set_pos(*object, (width - original_width) / 2,
+                   (height - original_height) / 2);
+    return 1;
+}
+
 static void clear_edit_preview(void)
 {
     if(!edit_preview_path[0]) return;
@@ -187,12 +232,21 @@ static void select_file(int index)
     if(index < 0 || index >= file_count) return;
     if(!prepare_image(index)) return;
     image_settings_load(files[index].path, &settings);
+    if(selected != index) clear_gifs();
     selected = index;
     char source[sizeof(preview_path) + 3];
     snprintf(source, sizeof(source), "A:%s", preview_path);
     lv_image_set_src(preview_image, source);
     lv_image_set_scale(preview_image, LV_SCALE_NONE);
-    lv_obj_set_pos(preview_image, 20, 4);
+    lv_obj_set_pos(preview_image, 0, 0);
+    if(image_is_gif(files[index].path) &&
+       show_gif(&preview_gif, preview_viewport, files[index].path,
+                &settings, PREVIEW_WIDTH, PREVIEW_HEIGHT)) {
+        lv_obj_add_flag(preview_image, LV_OBJ_FLAG_HIDDEN);
+        lv_gif_resume(preview_gif);
+    } else {
+        lv_obj_clear_flag(preview_image, LV_OBJ_FLAG_HIDDEN);
+    }
     lv_label_set_text(selected_label, files[index].name);
     lv_obj_remove_state(edit_button, LV_STATE_DISABLED);
     lv_obj_set_style_bg_color(edit_button, lv_color_hex(0x7B1FA2), 0);
@@ -216,6 +270,7 @@ static void scan_files(void)
 
     file_count = 0;
     selected = -1;
+    clear_gifs();
     clear_converted();
     lv_obj_add_state(edit_button, LV_STATE_DISABLED);
     lv_obj_set_style_bg_color(edit_button, lv_color_hex(0x424B52), 0);
@@ -254,6 +309,8 @@ static void scan_files(void)
 static void show_gallery(const char *message)
 {
     if(slideshow_timer) lv_timer_pause(slideshow_timer);
+    if(full_gif) lv_gif_pause(full_gif);
+    if(preview_gif) lv_gif_restart(preview_gif);
     clear_edit_preview();
     lv_obj_add_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(wifi_keyboard, LV_OBJ_FLAG_HIDDEN);
@@ -274,11 +331,26 @@ static int show_fullscreen_index(int index)
     if(index < 0 || index >= file_count) return 0;
     if(!prepare_image(index)) return 0;
     select_file(index);
+    if(preview_gif) lv_gif_pause(preview_gif);
     char source[sizeof(converted_path) + 3];
     snprintf(source, sizeof(source), "A:%s", converted_path);
     lv_image_set_src(full_image, source);
     lv_image_set_scale(full_image, 256);
     lv_obj_set_pos(full_image, 0, 0);
+    if(image_is_gif(files[index].path)) {
+        image_settings_t settings;
+        image_settings_load(files[index].path, &settings);
+        int new_gif = full_gif == NULL;
+        if(show_gif(&full_gif, viewer, files[index].path,
+                    &settings, 800, 480)) {
+            if(new_gif) {
+                lv_obj_add_flag(full_gif, LV_OBJ_FLAG_CLICKABLE);
+                lv_obj_add_event_cb(full_gif, fullscreen_tapped, LV_EVENT_CLICKED, NULL);
+            }
+            lv_obj_add_flag(full_image, LV_OBJ_FLAG_HIDDEN);
+            lv_gif_restart(full_gif);
+        } else lv_obj_clear_flag(full_image, LV_OBJ_FLAG_HIDDEN);
+    } else lv_obj_clear_flag(full_image, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(gallery, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(viewer, LV_OBJ_FLAG_HIDDEN);
     return 1;
@@ -445,6 +517,7 @@ static void wifi_open_pressed(lv_event_t *event)
 {
     (void)event;
     wifi_hide_keyboard(NULL);
+    if(preview_gif) lv_gif_pause(preview_gif);
     lv_obj_add_flag(gallery, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
     wifi_poll(NULL);
@@ -568,6 +641,7 @@ static void edit_open(lv_event_t *event)
     (void)event;
     if(selected < 0 || selected >= file_count) return;
     image_settings_load(files[selected].path, &editing_settings);
+    if(preview_gif) lv_gif_pause(preview_gif);
     lv_obj_add_flag(gallery, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
     if(!edit_refresh()) show_gallery("Could not load image editor.");
@@ -642,7 +716,12 @@ static void build_gallery(lv_obj_t *screen)
     lv_obj_t *frame = lv_obj_create(right); lv_obj_set_pos(frame, 12, 62); lv_obj_set_size(frame, 484, 276); style_box(frame, 0x000000, 12);
     lv_obj_set_style_border_color(frame, lv_color_hex(0x1565C0), 0); lv_obj_set_style_border_width(frame, 2, 0);
     lv_obj_clear_flag(frame, LV_OBJ_FLAG_SCROLLABLE);
-    preview_image = lv_image_create(frame);
+    preview_viewport = lv_obj_create(frame);
+    lv_obj_set_pos(preview_viewport, 20, 4);
+    lv_obj_set_size(preview_viewport, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+    style_box(preview_viewport, 0x000000, 0);
+    lv_obj_clear_flag(preview_viewport, LV_OBJ_FLAG_SCROLLABLE);
+    preview_image = lv_image_create(preview_viewport);
     lv_image_set_pivot(preview_image, 0, 0);
     lv_obj_t *footer = lv_obj_create(gallery); lv_obj_set_pos(footer, 18, 448); lv_obj_set_size(footer, 764, 24); style_box(footer, 0x003D3A, 7);
     status_label = text(footer, "Scanning photo folder...", 0xFFFFFF, 8, 4);

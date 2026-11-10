@@ -1,0 +1,10 @@
+# Raspberry Pi 4 USB mass-storage boot image.
+#
+# The layout matches the Raspberry Pi BSP's standard sdimage-raspberrypi.wks:
+# partition 1 is the FAT boot partition and partition 2 is the ext4 rootfs.
+# The target disk is intentionally sda, which is how the Pi kernel names the
+# USB boot drive.  The kernel command line is configured separately to mount
+# /dev/sda2 as root.
+
+part /boot --source bootimg-partition --ondisk sda --fstype=vfat --label boot --active --align 4096 --size 100
+part / --source rootfs --ondisk sda --fstype=ext4 --label root --align 4096

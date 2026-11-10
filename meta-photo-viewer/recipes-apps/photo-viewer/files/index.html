@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Photo Gallery</title>
+<style>
+  body { font: 16px system-ui; margin: 20px auto; padding: 0 16px; max-width: 850px; color: #f5f7fa; background: #101820 }
+  h1 { margin-bottom: 4px }
+  p { color: #b9c8d3 }
+  button, input { font: inherit; padding: 8px; margin: 4px }
+  button { cursor: pointer; background: #1565c0; color: white; border: 0; border-radius: 5px }
+  a { color: #64d8cb }
+  li { padding: 9px 0; border-bottom: 1px solid #456; display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
+  li span { flex: 1; min-width: 160px; overflow-wrap: anywhere }
+  progress { width: min(300px, 100%) }
+</style>
+<h1>Photo Gallery</h1>
+<p>Upload original photos. The Pi decodes supported formats and fits them to its 800 × 480 screen.</p>
+<section>
+  <h2>Upload images</h2>
+  <input id="original" type="file">
+  <button id="upload">Upload</button>
+</section>
+<progress id="progress" max="100" value="0" hidden></progress>
+<p id="status" role="status"></p>
+<h2>Stored images</h2>
+<ul id="files"></ul>
+<script>
+const original = document.querySelector('#original');
+const status = document.querySelector('#status');
+const progress = document.querySelector('#progress');
+const files = document.querySelector('#files');
+
+async function request(url, options) {
+  const response = await fetch(url, options);
+  const message = await response.text();
+  if (!response.ok) throw Error(message || `HTTP ${response.status}`);
+  return message;
+}
+
+async function refresh() {
+  try {
+    const response = await fetch('/api/files');
+    if (!response.ok) throw Error(await response.text());
+    const entries = await response.json();
+    files.replaceChildren();
+    for (const item of entries) {
+      const row = document.createElement('li');
+      const title = document.createElement('span');
+      title.textContent = `${item.name} (${Math.ceil(item.size / 1024)} KB)`;
+      row.append(title);
+      const download = document.createElement('a');
+      download.href = '/file?name=' + encodeURIComponent(item.name);
+      download.textContent = 'Download';
+      row.append(download);
+      for (const [label, action] of [
+        ['Copy', async () => {
+          const to = prompt('Copy to filename:', item.name);
+          if (to) await request('/copy?from=' + encodeURIComponent(item.name) + '&to=' + encodeURIComponent(to), {method:'POST'});
+        }],
+        ['Rename', async () => {
+          const to = prompt('New filename:', item.name);
+          if (to) await request('/rename?from=' + encodeURIComponent(item.name) + '&to=' + encodeURIComponent(to), {method:'POST'});
+        }],
+        ['Delete', async () => {
+          if (confirm('Delete ' + item.name + '?'))
+            await request('/delete?name=' + encodeURIComponent(item.name), {method:'DELETE'});
+        }]
+      ]) {
+        const button = document.createElement('button');
+        button.textContent = label;
+        button.onclick = async () => {
+          try { await action(); await refresh(); status.textContent = label + ' complete'; }
+          catch (error) { status.textContent = error.message; }
+        };
+        row.append(button);
+      }
+      files.append(row);
+    }
+  } catch (error) {
+    status.textContent = 'Could not list files: ' + error.message;
+  }
+}
+
+function send(blob, name) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    progress.hidden = false;
+    progress.value = 0;
+    status.textContent = 'Uploading...';
+    xhr.upload.onprogress = event => {
+      if (event.lengthComputable) {
+        progress.value = 100 * event.loaded / event.total;
+        status.textContent = 'Uploading: ' + Math.round(progress.value) + '%';
+      }
+    };
+    xhr.onload = () => xhr.status >= 200 && xhr.status < 300
+      ? resolve(xhr.responseText) : reject(Error(xhr.responseText || `HTTP ${xhr.status}`));
+    xhr.onerror = () => reject(Error('Network error'));
+    xhr.open('PUT', '/upload?name=' + encodeURIComponent(name));
+    xhr.send(blob);
+  });
+}
+
+document.querySelector('#upload').onclick = async () => {
+  const selected = original.files[0];
+  if (!selected) return;
+  try { await send(selected, selected.name); status.textContent = 'Uploaded ' + selected.name; await refresh(); }
+  catch (error) { status.textContent = error.message; }
+};
+
+refresh();
+</script>
+</html>

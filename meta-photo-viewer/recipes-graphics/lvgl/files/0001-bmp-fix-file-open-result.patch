@@ -1,0 +1,39 @@
+Upstream-Status: Pending
+
+--- a/src/libs/bmp/lv_bmp.c
++++ b/src/libs/bmp/lv_bmp.c
+@@ -10,6 +10,7 @@
+ #if LV_USE_BMP
+ 
+ #include <string.h>
++#include <strings.h>
+ 
+ /*********************
+  *      DEFINES
+@@ -89,7 +90,7 @@
+     /*If it's a BMP file...*/
+     if(src_type == LV_IMAGE_SRC_FILE) {
+         const char * fn = src;
+-        if(lv_strcmp(lv_fs_get_ext(fn), "bmp") == 0) {              /*Check the extension*/
++        if(strcasecmp(lv_fs_get_ext(fn), "bmp") == 0) {              /*Check the extension*/
+             /*Save the data in the header*/
+             lv_fs_file_t f;
+             lv_fs_res_t res = lv_fs_open(&f, src, LV_FS_MODE_RD);
+@@ -147,7 +148,7 @@
+     if(dsc->src_type == LV_IMAGE_SRC_FILE) {
+         const char * fn = dsc->src;
+ 
+-        if(lv_strcmp(lv_fs_get_ext(fn), "bmp") != 0) {
++        if(strcasecmp(lv_fs_get_ext(fn), "bmp") != 0) {
+             return LV_RESULT_INVALID;       /*Check the extension*/
+         }
+ 
+@@ -155,7 +156,7 @@
+         lv_memset(&b, 0x00, sizeof(b));
+ 
+         lv_fs_res_t res = lv_fs_open(&b.f, dsc->src, LV_FS_MODE_RD);
+-        if(res == LV_RESULT_OK) return LV_RESULT_INVALID;
++        if(res != LV_FS_RES_OK) return LV_RESULT_INVALID;
+ 
+         uint8_t header[54];
+         lv_fs_read(&b.f, header, 54, NULL);

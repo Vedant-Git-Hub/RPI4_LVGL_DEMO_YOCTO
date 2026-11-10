@@ -1,0 +1,10 @@
+/build/
+/downloads/
+/sstate-cache/
+/kas-container
+/poky/
+/meta-openembedded/
+/meta-raspberrypi/
+/netboot/
+/.repo-data/
+

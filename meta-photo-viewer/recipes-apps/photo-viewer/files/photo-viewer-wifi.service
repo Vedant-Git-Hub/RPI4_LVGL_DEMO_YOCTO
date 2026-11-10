@@ -1,0 +1,13 @@
+[Unit]
+Description=Photo viewer Wi-Fi connection
+After=sys-subsystem-net-devices-wlan0.device
+Wants=sys-subsystem-net-devices-wlan0.device
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/wpa_supplicant -i wlan0 -c /etc/photo-viewer-wpa.conf
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

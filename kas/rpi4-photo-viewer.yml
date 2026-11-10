@@ -1,0 +1,65 @@
+# Build profile for a 64-bit Raspberry Pi 4 Model B photo viewer.
+# Fetches the Yocto layers on the first build; no manual layer cloning is needed.
+header:
+  version: 14
+
+repos:
+  poky:
+    url: https://git.yoctoproject.org/git/poky
+    branch: scarthgap
+    layers:
+      meta:
+      meta-poky:
+
+  meta-openembedded:
+    url: https://github.com/openembedded/meta-openembedded.git
+    branch: scarthgap
+    layers:
+      meta-oe:
+
+  meta-raspberrypi:
+    url: https://github.com/agherzan/meta-raspberrypi.git
+    branch: scarthgap
+    layers:
+      .:
+
+  meta-photo-viewer:
+    path: .
+    layers:
+      meta-photo-viewer:
+
+local_conf_header:
+  photo-viewer-base: |
+    MACHINE = "raspberrypi4-64"
+    DISTRO = "poky"
+    INIT_MANAGER = "systemd"
+    hostname:pn-base-files = "rpi-photo-viewer"
+
+    # A dedicated LVGL appliance does not use a boot splash.  psplash has a
+    # hard dependency on the legacy fb0 sysfs path and otherwise delays boot
+    # for 90 seconds when the KMS display is still probing.
+    SPLASH = ""
+
+    # The image boots from USB mass storage on the Pi 4.
+    CMDLINE_ROOT_PARTITION = "/dev/sda2"
+    # Keep the kernel/systemd console off fb0.  LVGL owns that framebuffer.
+    # With only fb0 present, fbcon=map:1 deliberately maps consoles to the
+    # nonexistent fb1 instead of overwriting the LVGL screen and cursor.
+    CMDLINE_DEBUG = "fbcon=map:1 console=serial0,115200"
+    WKS_FILE = "usb-raspberrypi.wks"
+
+    # Required by the Raspberry Pi 4 BSP for its onboard Wi-Fi/Bluetooth
+    # firmware package (linux-firmware-rpidistro).
+    LICENSE_FLAGS_ACCEPTED = "synaptics-killswitch"
+
+    # The Waveshare panel overlay is not part of meta-raspberrypi's default
+    # deploy list. Build and place it in bootfs/overlays for firmware to load.
+    KERNEL_DEVICETREE:append = " overlays/vc4-kms-dsi-waveshare-800x480.dtbo"
+
+    # Waveshare 4.3inch DSI LCD (Rev 2.2, 800x480) on the Pi 4's DSI1 port.
+    # vc4-kms-v3d is already enabled by the Raspberry Pi machine configuration.
+    RPI_EXTRA_CONFIG = "dtoverlay=vc4-kms-dsi-waveshare-800x480\ngpu_mem=128\nenable_uart=1"
+
+target:
+  - photo-viewer-image
+

@@ -6,6 +6,5 @@ header:
 
 local_conf_header:
   photo-viewer-sd: |
-    CMDLINE_ROOT_PARTITION = "/dev/mmcblk0p2"
-    WKS_FILE = "sdimage-raspberrypi.wks"
+    PHOTO_VIEWER_BOOT_MEDIA = "sd"
     IMAGE_BASENAME:pn-photo-viewer-image = "photo-viewer-image-sd"

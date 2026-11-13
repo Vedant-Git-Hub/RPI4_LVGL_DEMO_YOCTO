@@ -76,7 +76,7 @@ do_install() {
     # dedicated Waveshare panel driver and Goodix touch controller.
     install -d ${D}${sysconfdir}/modules-load.d
     if [ "${PHOTO_VIEWER_7INCH}" = "1" ]; then
-        printf 'panel-waveshare-dsi\ngoodix\n' > ${D}${sysconfdir}/modules-load.d/photo-viewer-panel.conf
+        printf 'panel-waveshare-dsi\ngoodix_ts\n' > ${D}${sysconfdir}/modules-load.d/photo-viewer-panel.conf
     else
         install -m 0644 ${WORKDIR}/panel-simple.conf \
             ${D}${sysconfdir}/modules-load.d/photo-viewer-panel.conf
@@ -84,7 +84,7 @@ do_install() {
 }
 
 RDEPENDS:${PN} += "lvgl kernel-module-panel-simple kernel-module-uvcvideo imagemagick wpa-supplicant wpa-supplicant-cli"
-RDEPENDS:${PN}:append = " ${@'kernel-module-panel-waveshare-dsi kernel-module-goodix' if d.getVar('PHOTO_VIEWER_7INCH') == '1' else ''}"
+RDEPENDS:${PN}:append = " ${@'kernel-module-panel-waveshare-dsi kernel-module-goodix-ts' if d.getVar('PHOTO_VIEWER_7INCH') == '1' else ''}"
 FILES:${PN} += " \
     /opt/photo-viewer/photos \
     ${datadir}/photo-viewer/index.html \

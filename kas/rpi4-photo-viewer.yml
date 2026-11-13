@@ -33,7 +33,7 @@ local_conf_header:
     MACHINE = "raspberrypi4-64"
     DISTRO = "poky"
     INIT_MANAGER = "systemd"
-    hostname:pn-base-files = "rpi-photo-viewer"
+    hostname:pn-base-files = "vedantsphotogallary"
 
     # A dedicated LVGL appliance does not use a boot splash.  psplash has a
     # hard dependency on the legacy fb0 sysfs path and otherwise delays boot

@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <poll.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -355,33 +356,47 @@ static void serve_client(int fd)
     upload_file(fd, path, body, used - (size_t)(body - request), content_length);
 }
 
-static void *server_main(void *unused)
+static int listen_port(unsigned int port)
 {
-    (void)unused;
     int listener = socket(AF_INET, SOCK_STREAM, 0);
-    if(listener < 0) {
-        perror("photo-viewer: socket");
-        return NULL;
-    }
+    if(listener < 0) return -1;
     int yes = 1;
     struct sockaddr_in address = {
-        .sin_family = AF_INET, .sin_port = htons(8080),
+        .sin_family = AF_INET, .sin_port = htons(port),
         .sin_addr.s_addr = htonl(INADDR_ANY)
     };
     setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
     if(bind(listener, (void *)&address, sizeof(address)) || listen(listener, 4)) {
         perror("photo-viewer: bind/listen");
         close(listener);
+        return -1;
+    }
+    return listener;
+}
+
+static void *server_main(void *unused)
+{
+    (void)unused;
+    struct pollfd listeners[2] = {
+        {.fd = listen_port(80), .events = POLLIN},
+        {.fd = listen_port(8080), .events = POLLIN}
+    };
+    if(listeners[0].fd < 0 && listeners[1].fd < 0) {
+        fprintf(stderr, "photo-viewer: could not listen on HTTP ports 80 or 8080\n");
         return NULL;
     }
     for(;;) {
-        int fd = accept(listener, NULL, NULL);
-        if(fd < 0) continue;
-        struct timeval timeout = {.tv_sec = 10};
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-        serve_client(fd);
-        close(fd);
+        if(poll(listeners, 2, -1) <= 0) continue;
+        for(size_t i = 0; i < 2; i++) {
+            if(!(listeners[i].revents & POLLIN)) continue;
+            int fd = accept(listeners[i].fd, NULL, NULL);
+            if(fd < 0) continue;
+            struct timeval timeout = {.tv_sec = 10};
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+            serve_client(fd);
+            close(fd);
+        }
     }
 }
 

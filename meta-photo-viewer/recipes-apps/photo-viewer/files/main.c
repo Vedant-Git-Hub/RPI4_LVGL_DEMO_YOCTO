@@ -18,6 +18,7 @@
 #include "image_convert.h"
 #include "wifi_control.h"
 #include "camera_ui.h"
+#include "hostname_settings.h"
 
 #define PHOTO_DIR "/opt/photo-viewer/photos"
 #define CARD_DEVICE "/dev/mmcblk0p1"
@@ -43,13 +44,15 @@ static lv_timer_t *slideshow_timer;
 static lv_obj_t *gallery, *viewer, *file_list, *preview_image, *full_image;
 static lv_obj_t *preview_viewport, *preview_gif, *full_gif;
 static lv_obj_t *selected_label, *count_label, *status_label;
-static lv_obj_t *edit_button, *edit_screen, *edit_preview_image;
+static lv_obj_t *settings_screen, *settings_image_button;
+static lv_obj_t *edit_screen, *edit_preview_image;
 static lv_obj_t *edit_status_label, *edit_rotation_label;
 static lv_obj_t *fit_button, *fill_button;
 static image_settings_t editing_settings;
 static lv_obj_t *storage_label;
 static lv_obj_t *wifi_screen, *wifi_list, *wifi_ssid, *wifi_password;
 static lv_obj_t *wifi_status_label, *wifi_keyboard;
+static lv_obj_t *hostname_field, *hostname_status_label;
 static wifi_network_t wifi_networks[WIFI_MAX_NETWORKS];
 static lv_timer_t *wifi_scan_timer;
 
@@ -253,8 +256,7 @@ static void select_file(int index)
         lv_obj_clear_flag(preview_image, LV_OBJ_FLAG_HIDDEN);
     }
     lv_label_set_text(selected_label, files[index].name);
-    lv_obj_remove_state(edit_button, LV_STATE_DISABLED);
-    lv_obj_set_style_bg_color(edit_button, lv_color_hex(0x7B1FA2), 0);
+    lv_obj_remove_state(settings_image_button, LV_STATE_DISABLED);
     if(gif_file && !gif_playing)
         snprintf(message, sizeof(message), "GIF animation unavailable; showing first frame: %s",
                  files[index].name);
@@ -281,8 +283,7 @@ static void scan_files(void)
     selected = -1;
     clear_gifs();
     clear_converted();
-    lv_obj_add_state(edit_button, LV_STATE_DISABLED);
-    lv_obj_set_style_bg_color(edit_button, lv_color_hex(0x424B52), 0);
+    lv_obj_add_state(settings_image_button, LV_STATE_DISABLED);
     lv_label_set_text(selected_label, "Choose an image from the library");
     lv_obj_clean(file_list);
     directory = opendir(PHOTO_DIR);
@@ -326,8 +327,47 @@ static void show_gallery(const char *message)
     lv_obj_add_flag(wifi_keyboard, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(viewer, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(gallery, LV_OBJ_FLAG_HIDDEN);
     if(message) set_status(message);
+}
+
+static void show_settings(void)
+{
+    camera_ui_close();
+    lv_obj_add_flag(wifi_keyboard, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(gallery, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(settings_screen);
+    if(selected >= 0) lv_obj_remove_state(settings_image_button, LV_STATE_DISABLED);
+    else lv_obj_add_state(settings_image_button, LV_STATE_DISABLED);
+}
+
+static void settings_open_pressed(lv_event_t *event)
+{
+    (void)event;
+    if(preview_gif) lv_gif_pause(preview_gif);
+    show_settings();
+}
+
+static void settings_back_pressed(lv_event_t *event)
+{
+    (void)event;
+    show_gallery(NULL);
+}
+
+static void camera_settings_open(lv_event_t *event)
+{
+    (void)event;
+    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
+    camera_ui_open_settings();
+}
+
+static void camera_settings_back(void)
+{
+    show_settings();
 }
 
 static void camera_open_pressed(lv_event_t *event)
@@ -480,6 +520,7 @@ static void wifi_hide_keyboard(lv_event_t *event)
     if(event && lv_event_get_code(event) == LV_EVENT_CLICKED) {
         lv_obj_t *target = lv_event_get_target(event);
         if(target == wifi_ssid || target == wifi_password ||
+           target == hostname_field ||
            target == wifi_keyboard) return;
     }
     lv_obj_add_flag(wifi_keyboard, LV_OBJ_FLAG_HIDDEN);
@@ -549,15 +590,40 @@ static void wifi_field_pressed(lv_event_t *event)
 static void wifi_back_pressed(lv_event_t *event)
 {
     (void)event;
-    show_gallery(NULL);
+    show_settings();
+}
+
+static void hostname_save_pressed(lv_event_t *event)
+{
+    (void)event;
+    wifi_hide_keyboard(NULL);
+    const char *name = lv_textarea_get_text(hostname_field);
+    if(!photo_hostname_valid(name)) {
+        lv_label_set_text(hostname_status_label,
+                          "Use 1-63 lowercase letters, digits or hyphens; no edge hyphen.");
+        return;
+    }
+    int result = photo_hostname_apply(name);
+    char message[160];
+    if(result == 1)
+        snprintf(message, sizeof(message), "Open http://%s.local/ on this LAN.", name);
+    else if(result == 2)
+        snprintf(message, sizeof(message), "Saved %s.local. Reboot to activate it.", name);
+    else
+        snprintf(message, sizeof(message), "Could not save the hostname.");
+    lv_label_set_text(hostname_status_label, message);
 }
 
 static void wifi_open_pressed(lv_event_t *event)
 {
     (void)event;
     wifi_hide_keyboard(NULL);
-    if(preview_gif) lv_gif_pause(preview_gif);
-    lv_obj_add_flag(gallery, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
+    char name[64], message[160];
+    photo_hostname_current(name, sizeof(name));
+    lv_textarea_set_text(hostname_field, name);
+    snprintf(message, sizeof(message), "Current: http://%s.local/", name);
+    lv_label_set_text(hostname_status_label, message);
     lv_obj_clear_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
     wifi_poll(NULL);
     wifi_rescan(NULL);
@@ -571,7 +637,7 @@ static void build_wifi(lv_obj_t *screen)
     lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(wifi_screen, wifi_hide_keyboard, LV_EVENT_CLICKED, NULL);
     lv_obj_clear_flag(wifi_screen, LV_OBJ_FLAG_SCROLLABLE);
-    text(wifi_screen, "WI-FI SETUP", 0xFFFFFF, 20, 14);
+    text(wifi_screen, "NETWORK SETTINGS", 0xFFFFFF, 20, 14);
     lv_obj_t *back = button(wifi_screen, "BACK", 0x455A64, 680, 8, 100, 38);
     lv_obj_add_event_cb(back, wifi_back_pressed, LV_EVENT_CLICKED, NULL);
     wifi_status_label = text(wifi_screen, "Checking Wi-Fi...", 0x00BFA5, 20, 50);
@@ -603,6 +669,19 @@ static void build_wifi(lv_obj_t *screen)
     lv_obj_add_event_cb(wifi_password, wifi_hide_keyboard, LV_EVENT_READY, NULL);
     lv_obj_t *connect = button(wifi_screen, "CONNECT AND SAVE", 0x00A152, 400, 226, 370, 38);
     lv_obj_add_event_cb(connect, wifi_connect_pressed, LV_EVENT_CLICKED, NULL);
+    text(wifi_screen, "Local web address (name before .local)", 0xFFFFFF, 20, 284);
+    hostname_field = lv_textarea_create(wifi_screen);
+    lv_obj_set_pos(hostname_field, 20, 313);
+    lv_obj_set_size(hostname_field, 470, 44);
+    lv_textarea_set_one_line(hostname_field, true);
+    lv_textarea_set_max_length(hostname_field, 63);
+    lv_obj_add_event_cb(hostname_field, wifi_field_pressed, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(hostname_field, wifi_hide_keyboard, LV_EVENT_READY, NULL);
+    text(wifi_screen, ".local", 0x00BFA5, 500, 324);
+    lv_obj_t *save_name = button(wifi_screen, "SAVE NAME", 0x1565C0, 635, 313, 140, 44);
+    lv_obj_add_event_cb(save_name, hostname_save_pressed, LV_EVENT_CLICKED, NULL);
+    hostname_status_label = text(wifi_screen, "", 0xFDD835, 20, 370);
+    lv_obj_set_width(hostname_status_label, 760);
     wifi_keyboard = lv_keyboard_create(wifi_screen);
     lv_obj_set_size(wifi_keyboard, 800, 210);
     lv_obj_align(wifi_keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
@@ -658,21 +737,24 @@ static void edit_mode(lv_event_t *event)
 static void edit_cancel(lv_event_t *event)
 {
     (void)event;
-    show_gallery(NULL);
+    clear_edit_preview();
+    show_settings();
 }
 
 static void edit_save(lv_event_t *event)
 {
     (void)event;
-    if(selected < 0 || selected >= file_count) { show_gallery(NULL); return; }
+    if(selected < 0 || selected >= file_count) { show_settings(); return; }
     int index = selected;
     if(!image_settings_save(files[index].path, &editing_settings)) {
         lv_label_set_text(edit_status_label, "Could not save settings to photo storage.");
         return;
     }
-    show_gallery(NULL);
+    clear_edit_preview();
+    show_settings();
     clear_converted();
     select_file(index);
+    if(preview_gif) lv_gif_pause(preview_gif);
 }
 
 static void edit_open(lv_event_t *event)
@@ -681,9 +763,30 @@ static void edit_open(lv_event_t *event)
     if(selected < 0 || selected >= file_count) return;
     image_settings_load(files[selected].path, &editing_settings);
     if(preview_gif) lv_gif_pause(preview_gif);
-    lv_obj_add_flag(gallery, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
-    if(!edit_refresh()) show_gallery("Could not load image editor.");
+    if(!edit_refresh()) show_settings();
+}
+
+static void build_settings(lv_obj_t *screen)
+{
+    settings_screen = lv_obj_create(screen);
+    lv_obj_set_size(settings_screen, 800, 480);
+    style_box(settings_screen, 0x08151C, 0);
+    lv_obj_clear_flag(settings_screen, LV_OBJ_FLAG_SCROLLABLE);
+    text(settings_screen, "SETTINGS", 0xFFFFFF, 24, 20);
+    lv_obj_t *back = button(settings_screen, "BACK", 0x455A64, 678, 12, 100, 42);
+    lv_obj_add_event_cb(back, settings_back_pressed, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *network = button(settings_screen, "NETWORK SETTINGS", 0x1565C0, 80, 105, 640, 70);
+    lv_obj_add_event_cb(network, wifi_open_pressed, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *camera = button(settings_screen, "CAMERA SETTINGS", 0x7B1FA2, 80, 195, 640, 70);
+    lv_obj_add_event_cb(camera, camera_settings_open, LV_EVENT_CLICKED, NULL);
+    settings_image_button = button(settings_screen, "IMAGE SETTINGS", 0x00A152, 80, 285, 640, 70);
+    lv_obj_add_state(settings_image_button, LV_STATE_DISABLED);
+    lv_obj_add_event_cb(settings_image_button, edit_open, LV_EVENT_CLICKED, NULL);
+    text(settings_screen, "Select a photo in the gallery to edit its image settings.",
+         0x00BFA5, 80, 385);
+    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void build_edit(lv_obj_t *screen)
@@ -735,7 +838,8 @@ static void build_gallery(lv_obj_t *screen)
     count_label = text(head, "FOLDER OFFLINE", 0xFDD835, 365, 25);
     lv_obj_t *camera_button = button(head, "CAMERA", 0x7B1FA2, 455, 15, 105, 38);
     lv_obj_add_event_cb(camera_button, camera_open_pressed, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *wifi = button(head, "WI-FI", 0x455A64, 570, 15, 100, 38); lv_obj_add_event_cb(wifi, wifi_open_pressed, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *settings = button(head, "SETTINGS", 0x455A64, 570, 15, 100, 38);
+    lv_obj_add_event_cb(settings, settings_open_pressed, LV_EVENT_CLICKED, NULL);
     lv_obj_t *refresh = button(head, "RESCAN", 0x1565C0, 680, 15, 102, 38); lv_obj_add_event_cb(refresh, rescan, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *left = lv_obj_create(gallery); lv_obj_set_pos(left, 18, 82); lv_obj_set_size(left, 242, 358); style_box(left, 0x101010, 16);
@@ -748,9 +852,6 @@ static void build_gallery(lv_obj_t *screen)
 
     lv_obj_t *right = lv_obj_create(gallery); lv_obj_set_pos(right, 274, 82); lv_obj_set_size(right, 508, 358); style_box(right, 0x101010, 16);
     text(right, "PREVIEW", 0x1565C0, 12, 12);
-    edit_button = button(right, "EDIT IMAGE", 0x424B52, 382, 10, 110, 38);
-    lv_obj_add_state(edit_button, LV_STATE_DISABLED);
-    lv_obj_add_event_cb(edit_button, edit_open, LV_EVENT_CLICKED, NULL);
     selected_label = text(right, "Choose an image from the library", 0xFFFFFF, 12, 38);
     lv_obj_set_width(selected_label, 360);
     lv_label_set_long_mode(selected_label, LV_LABEL_LONG_DOT);
@@ -786,8 +887,9 @@ int main(void)
     lv_linux_fbdev_set_file(display, "/dev/fb0");
     enable_touch();
     lv_obj_t *screen = lv_screen_active(); style_box(screen, 0x000000, 0);
-    build_gallery(screen); build_viewer(screen); build_wifi(screen); build_edit(screen);
-    camera_ui_build(screen, PHOTO_DIR, camera_back, camera_saved);
+    build_gallery(screen); build_viewer(screen); build_wifi(screen);
+    build_edit(screen); build_settings(screen);
+    camera_ui_build(screen, PHOTO_DIR, camera_back, camera_saved, camera_settings_back);
     refresh_card_mount();
     scan_files();
     lv_timer_create(card_poll, 5000, NULL);

@@ -16,8 +16,10 @@
 static const char *photo_dir;
 static void (*back_callback)(void);
 static void (*saved_callback)(const char *name);
+static void (*settings_back_callback)(void);
 static lv_obj_t *camera_screen, *camera_image, *camera_status, *camera_title;
 static lv_obj_t *capture_button, *settings_layer, *settings_dropdown;
+static lv_obj_t *settings_status;
 static lv_obj_t *save_layer, *filename_field, *save_keyboard, *save_status;
 static lv_timer_t *camera_timer;
 static camera_device_t *camera;
@@ -324,36 +326,65 @@ static void keyboard_outside(lv_event_t *event)
 static void settings_pressed(lv_event_t *event)
 {
     (void)event;
+    mode_count = camera_discover(device_path, sizeof(device_path), camera_name,
+                                 sizeof(camera_name), modes, CAMERA_MAX_MODES);
     if(!mode_count) {
-        probe_camera();
-        if(!mode_count) return;
+        lv_dropdown_set_options(settings_dropdown, "No supported camera connected");
+        lv_label_set_text(settings_status, "Connect a USB UVC camera to list its modes.");
+    } else {
+        char options[CAMERA_MAX_MODES * 32] = {0};
+        size_t used = 0;
+        for(int i = 0; i < mode_count; i++) {
+            int added = snprintf(options + used, sizeof(options) - used,
+                                 "%s%u x %u  (%s)", i ? "\n" : "",
+                                 modes[i].width, modes[i].height,
+                                 camera_format_name(modes[i].format));
+            if(added < 0 || (size_t)added >= sizeof(options) - used) break;
+            used += (size_t)added;
+        }
+        lv_dropdown_set_options(settings_dropdown, options);
+        uint32_t width = 0, height = 0, format = 0;
+        int remembered = saved_resolution(&width, &height, &format);
+        int chosen = 0;
+        for(int i = 0; i < mode_count; i++) {
+            if(remembered && modes[i].width == width && modes[i].height == height &&
+               (!format || modes[i].format == format)) { chosen = i; break; }
+        }
+        lv_dropdown_set_selected(settings_dropdown, chosen);
+        lv_label_set_text(settings_status, "Select the resolution and camera format.");
     }
-    lv_dropdown_set_selected(settings_dropdown, selected_mode);
     lv_obj_clear_flag(settings_layer, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(settings_layer);
 }
 
 static void settings_cancel(lv_event_t *event)
 {
     (void)event;
     lv_obj_add_flag(settings_layer, LV_OBJ_FLAG_HIDDEN);
+    if(settings_back_callback) settings_back_callback();
 }
 
 static void settings_apply(lv_event_t *event)
 {
     (void)event;
     int index = (int)lv_dropdown_get_selected(settings_dropdown);
-    if(index < 0 || index >= mode_count) return;
+    if(index < 0 || index >= mode_count) {
+        lv_label_set_text(settings_status, "No camera resolution is available.");
+        return;
+    }
+    remember_resolution(&modes[index]);
     lv_obj_add_flag(settings_layer, LV_OBJ_FLAG_HIDDEN);
-    start_mode(index);
-    if(camera) remember_resolution(&modes[index]);
+    if(settings_back_callback) settings_back_callback();
 }
 
 void camera_ui_build(lv_obj_t *root, const char *photo_directory,
-                     void (*on_back)(void), void (*on_saved)(const char *name))
+                     void (*on_back)(void), void (*on_saved)(const char *name),
+                     void (*on_settings_back)(void))
 {
     photo_dir = photo_directory;
     back_callback = on_back;
     saved_callback = on_saved;
+    settings_back_callback = on_settings_back;
     camera_screen = lv_obj_create(root);
     lv_obj_set_size(camera_screen, 800, 480);
     style(camera_screen, 0x08151C);
@@ -380,8 +411,6 @@ void camera_ui_build(lv_obj_t *root, const char *photo_directory,
     capture_button = button(camera_screen, "CAPTURE", 0x424B52, 604, 160, 170, 56);
     lv_obj_add_event_cb(capture_button, capture_pressed, LV_EVENT_CLICKED, NULL);
     set_capture_enabled(0);
-    lv_obj_t *settings = button(camera_screen, "SETTINGS", 0x1565C0, 604, 235, 170, 52);
-    lv_obj_add_event_cb(settings, settings_pressed, LV_EVENT_CLICKED, NULL);
     camera_status = label(camera_screen, "Connect a USB camera.", 0x00BFA5,
                           20, 418, 760);
 
@@ -395,6 +424,7 @@ void camera_ui_build(lv_obj_t *root, const char *photo_directory,
     lv_obj_set_pos(settings_dropdown, 170, 140);
     lv_obj_set_size(settings_dropdown, 460, 48);
     lv_dropdown_set_options(settings_dropdown, "No camera modes");
+    settings_status = label(settings_layer, "", 0xFDD835, 170, 205, 500);
     lv_obj_t *apply = button(settings_layer, "APPLY", 0x00A152, 170, 245, 205, 52);
     lv_obj_add_event_cb(apply, settings_apply, LV_EVENT_CLICKED, NULL);
     lv_obj_t *cancel_settings = button(settings_layer, "CANCEL", 0x455A64,
@@ -447,6 +477,12 @@ void camera_ui_open(void)
     }
     probe_camera();
     lv_timer_resume(camera_timer);
+}
+
+void camera_ui_open_settings(void)
+{
+    if(!settings_layer) return;
+    settings_pressed(NULL);
 }
 
 void camera_ui_close(void)

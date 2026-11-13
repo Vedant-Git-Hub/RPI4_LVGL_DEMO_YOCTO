@@ -13,11 +13,11 @@ playback loops until the screen is touched. **Rescan** refreshes files copied
 directly into the photo directory. Browser changes refresh the list
 automatically.
 
-After selecting a photo, tap **Edit Image** beside the preview to rotate it
+After selecting a photo, tap **Settings → Image Settings** to rotate it
 left or right by 90 degrees and choose **Fit Whole Image** or **Fill Display**.
 Fit shows the entire image with black margins where needed. Fill covers the
 screen and crops the edges. The editor previews the result before you save.
-The Edit Image button is disabled until a photo is selected.
+Image Settings is disabled until a photo is selected.
 
 Saved choices apply to the preview, full-screen view, and slideshow after
 reboot. They live in a hidden `.filename.pv` file alongside each original
@@ -33,7 +33,7 @@ name and choose **Save** or **Cancel**. Saved photos are JPEGs in the active
 gallery storage, including the SD card when mounted, and appear in the image
 library. Back closes the camera.
 
-**Settings** lists resolutions reported by the camera. Choose one and tap
+**Settings → Camera Settings** lists resolutions reported by the camera. Choose one and tap
 **Apply**; the choice is saved across boots in `/opt/photo-viewer/camera.conf`.
 The viewer supports USB cameras that expose MJPEG or YUYV through Video4Linux2.
 Where a camera offers both formats at one resolution, Settings lists both so
@@ -71,7 +71,7 @@ and ImageMagick's resource limits.
 
 ## Wi-Fi and browser manager
 
-Tap **Wi-Fi** on the gallery screen to scan nearby networks, select an SSID,
+Tap **Settings → Network Settings** on the gallery screen to scan nearby networks, select an SSID,
 enter its password with the on-screen keyboard, and connect. The connection
 profile is saved in `/etc/photo-viewer-wpa.conf` and reconnects after reboot.
 The keyboard opens when a text field is tapped and closes when you tap
@@ -79,8 +79,11 @@ outside it.
 The status line shows the Pi's address after DHCP completes. Ethernet can
 also reach the web manager.
 
-Open `http://rpi-photo-viewer.local:8080/` from a computer on the same LAN,
-or use the IP address shown on the Pi. The page can upload original images;
+Open `http://vedantsphotogallary.local/` from a computer on the same LAN.
+The local name can be changed in Network Settings and is retained after reboot.
+Avahi advertises it through mDNS; the computer must support `.local` names.
+Port 8080 remains available for older bookmarks.
+The page can upload original images;
 download, copy, rename, or delete stored files. Upload progress is shown.
 The manager has no login or TLS, so keep it on a trusted LAN.
 

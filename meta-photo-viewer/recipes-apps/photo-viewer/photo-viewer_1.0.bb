@@ -1,6 +1,6 @@
 SUMMARY = "LVGL touchscreen photo gallery and browser media server"
 LICENSE = "MIT"
-PR = "r12"
+PR = "r13"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
 DEPENDS = "lvgl libjpeg-turbo"
@@ -19,6 +19,8 @@ SRC_URI = " \
     file://camera_backend.h \
     file://camera_ui.c \
     file://camera_ui.h \
+    file://hostname_settings.c \
+    file://hostname_settings.h \
     file://index.html \
     file://Makefile \
     file://panel-simple.conf \

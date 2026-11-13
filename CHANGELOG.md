@@ -1,5 +1,13 @@
 # Release history
 
+## Unreleased
+
+- Add an SD boot profile and make `flash.sh` build the matching USB or SD
+  image before flashing. It asks for the medium when a USB card reader cannot
+  be distinguished from a USB stick.
+- Use the SD root partition for photos when booting from SD, leaving the
+  firmware boot partition untouched by the gallery.
+
 ## Stable version 1.0 — 2026-11-13
 
 - Raspberry Pi 4 LVGL gallery for the Waveshare 800 × 480 DSI display.

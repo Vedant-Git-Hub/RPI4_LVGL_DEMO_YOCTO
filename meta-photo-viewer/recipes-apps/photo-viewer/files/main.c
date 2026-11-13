@@ -37,6 +37,7 @@ static int file_count;
 static int selected = -1;
 static int converted_index = -1;
 static int card_mounted;
+static int sd_boot;
 static char converted_path[128];
 static char preview_path[128];
 static char edit_preview_path[128];
@@ -101,6 +102,11 @@ static void set_status(const char *message)
 
 static int refresh_card_mount(void)
 {
+    /* On SD boot, mmcblk0p1 is the firmware boot partition, not photo storage. */
+    if(sd_boot) {
+        lv_label_set_text(storage_label, "SD");
+        return 0;
+    }
     int present = access(CARD_DEVICE, F_OK) == 0;
     if(present && !card_mounted) {
         if(mount(CARD_DEVICE, PHOTO_DIR, "vfat", MS_NOATIME, "utf8=1") &&
@@ -117,6 +123,14 @@ static int refresh_card_mount(void)
         return 1;
     }
     return 0;
+}
+
+static int root_is_sd_card(void)
+{
+    struct stat root, partition;
+    return stat("/", &root) == 0 &&
+           stat("/dev/mmcblk0p2", &partition) == 0 &&
+           S_ISBLK(partition.st_mode) && root.st_dev == partition.st_rdev;
 }
 
 static int compare_files(const void *left, const void *right)
@@ -890,6 +904,7 @@ int main(void)
     build_gallery(screen); build_viewer(screen); build_wifi(screen);
     build_edit(screen); build_settings(screen);
     camera_ui_build(screen, PHOTO_DIR, camera_back, camera_saved, camera_settings_back);
+    sd_boot = root_is_sd_card();
     refresh_card_mount();
     scan_files();
     lv_timer_create(card_poll, 5000, NULL);

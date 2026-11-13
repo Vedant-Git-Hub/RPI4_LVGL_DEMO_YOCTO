@@ -1,0 +1,11 @@
+# SD-card boot variant of the same Pi 4 photo viewer image.
+header:
+  version: 14
+  includes:
+    - kas/rpi4-photo-viewer.yml
+
+local_conf_header:
+  photo-viewer-sd: |
+    CMDLINE_ROOT_PARTITION = "/dev/mmcblk0p2"
+    WKS_FILE = "sdimage-raspberrypi.wks"
+    IMAGE_BASENAME:pn-photo-viewer-image = "photo-viewer-image-sd"

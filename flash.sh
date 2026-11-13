@@ -4,12 +4,12 @@ set -Eeuo pipefail
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 usage() {
-    printf 'Usage: %s DRIVE [usb|sd]\n' "${0##*/}" >&2
-    printf 'Examples: %s sdc usb, %s sdc sd, %s mmcblk0\n' "${0##*/}" "${0##*/}" "${0##*/}" >&2
+    printf 'Usage: %s DRIVE [usb|sd] [7inch]\n' "${0##*/}" >&2
+    printf 'Examples: %s sdc usb, %s sdc sd 7inch, %s mmcblk0 sd 7inch\n' "${0##*/}" "${0##*/}" "${0##*/}" >&2
     printf 'Use the whole drive name shown by lsblk, without /dev/ or a partition number.\n' >&2
 }
 
-if [[ $# -lt 1 || $# -gt 2 || ! $1 =~ ^(sd[a-z]+|mmcblk[0-9]+)$ ]]; then
+if [[ $# -lt 1 || $# -gt 3 || ! $1 =~ ^(sd[a-z]+|mmcblk[0-9]+)$ ]]; then
     usage
     exit 2
 fi
@@ -17,7 +17,12 @@ fi
 drive=$1
 device="/dev/$drive"
 media=${2:-}
+display=${3:-}
 if [[ -n $media && $media != usb && $media != sd ]]; then
+    usage
+    exit 2
+fi
+if [[ -n $display && $display != 7inch ]]; then
     usage
     exit 2
 fi
@@ -59,12 +64,22 @@ if [[ -z $media ]]; then
 fi
 
 if [[ $media == sd ]]; then
-    profile="$script_dir/kas/rpi4-photo-viewer-sd.yml"
-    image="$script_dir/build/tmp/deploy/images/raspberrypi4-64/photo-viewer-image-sd-raspberrypi4-64.rootfs.wic.bz2"
+    if [[ $display == 7inch ]]; then
+        profile="$script_dir/kas/rpi4-photo-viewer-7inch-sd.yml"
+        image="$script_dir/build/tmp/deploy/images/raspberrypi4-64/photo-viewer-image-7inch-sd-raspberrypi4-64.rootfs.wic.bz2"
+    else
+        profile="$script_dir/kas/rpi4-photo-viewer-sd.yml"
+        image="$script_dir/build/tmp/deploy/images/raspberrypi4-64/photo-viewer-image-sd-raspberrypi4-64.rootfs.wic.bz2"
+    fi
     root_partition=/dev/mmcblk0p2
 else
-    profile="$script_dir/kas/rpi4-photo-viewer.yml"
-    image="$script_dir/build/tmp/deploy/images/raspberrypi4-64/photo-viewer-image-raspberrypi4-64.rootfs.wic.bz2"
+    if [[ $display == 7inch ]]; then
+        profile="$script_dir/kas/rpi4-photo-viewer-7inch.yml"
+        image="$script_dir/build/tmp/deploy/images/raspberrypi4-64/photo-viewer-image-7inch-raspberrypi4-64.rootfs.wic.bz2"
+    else
+        profile="$script_dir/kas/rpi4-photo-viewer.yml"
+        image="$script_dir/build/tmp/deploy/images/raspberrypi4-64/photo-viewer-image-raspberrypi4-64.rootfs.wic.bz2"
+    fi
     root_partition=/dev/sda2
 fi
 

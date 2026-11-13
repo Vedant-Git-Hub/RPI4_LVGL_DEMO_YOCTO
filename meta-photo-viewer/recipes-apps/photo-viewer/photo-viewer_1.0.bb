@@ -1,12 +1,14 @@
 SUMMARY = "LVGL touchscreen photo gallery and browser media server"
 LICENSE = "MIT"
 PR = "r13"
+PHOTO_VIEWER_7INCH ??= "0"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
 DEPENDS = "lvgl libjpeg-turbo"
 
 SRC_URI = " \
     file://main.c \
+    file://display_layout.h \
     file://media_server.c \
     file://media_server.h \
     file://image_convert.c \
@@ -41,7 +43,7 @@ SYSTEMD_AUTO_ENABLE:${PN} = "enable"
 do_configure[noexec] = "1"
 
 do_compile() {
-    oe_runmake
+    oe_runmake PHOTO_VIEWER_7INCH="${PHOTO_VIEWER_7INCH}"
 }
 
 do_install() {
@@ -69,15 +71,20 @@ do_install() {
     install -d ${D}${sysconfdir}/systemd/system
     ln -s /dev/null ${D}${sysconfdir}/systemd/system/getty@tty1.service
 
-    # The Waveshare overlay falls back to the generic "panel-dsi" compatible.
-    # Its first compatible does not trigger module autoload, so load the
-    # generic panel driver explicitly before the display service starts.
+    # Load the selected panel driver before the display service starts.
+    # The 4.3-inch overlay needs panel-simple; the 7-inch C panel uses the
+    # dedicated Waveshare panel driver and Goodix touch controller.
     install -d ${D}${sysconfdir}/modules-load.d
-    install -m 0644 ${WORKDIR}/panel-simple.conf \
-        ${D}${sysconfdir}/modules-load.d/photo-viewer-panel.conf
+    if [ "${PHOTO_VIEWER_7INCH}" = "1" ]; then
+        printf 'panel-waveshare-dsi\ngoodix\n' > ${D}${sysconfdir}/modules-load.d/photo-viewer-panel.conf
+    else
+        install -m 0644 ${WORKDIR}/panel-simple.conf \
+            ${D}${sysconfdir}/modules-load.d/photo-viewer-panel.conf
+    fi
 }
 
 RDEPENDS:${PN} += "lvgl kernel-module-panel-simple kernel-module-uvcvideo imagemagick wpa-supplicant wpa-supplicant-cli"
+RDEPENDS:${PN}:append = " ${@'kernel-module-panel-waveshare-dsi kernel-module-goodix' if d.getVar('PHOTO_VIEWER_7INCH') == '1' else ''}"
 FILES:${PN} += " \
     /opt/photo-viewer/photos \
     ${datadir}/photo-viewer/index.html \

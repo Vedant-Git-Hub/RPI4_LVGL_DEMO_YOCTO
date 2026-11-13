@@ -19,12 +19,13 @@
 #include "wifi_control.h"
 #include "camera_ui.h"
 #include "hostname_settings.h"
+#include "display_layout.h"
 
 #define PHOTO_DIR "/opt/photo-viewer/photos"
 #define CARD_DEVICE "/dev/mmcblk0p1"
 #define MAX_FILES 64
-#define PREVIEW_WIDTH 440
-#define PREVIEW_HEIGHT 264
+#define PREVIEW_WIDTH PHOTO_PREVIEW_WIDTH
+#define PREVIEW_HEIGHT PHOTO_PREVIEW_HEIGHT
 
 typedef struct {
     char name[128];
@@ -225,7 +226,7 @@ static int prepare_image(int index)
     image_settings_t settings;
     image_settings_load(files[index].path, &settings);
     if(!image_convert_to_bmp_edit(files[index].path, files[index].name,
-                                  800, 480, &settings,
+                                  PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT, &settings,
                                   converted, sizeof(converted))) {
         set_status("Could not decode image. Check the file and installed format support.");
         return 0;
@@ -434,7 +435,7 @@ static int show_fullscreen_index(int index)
         image_settings_load(files[index].path, &settings);
         int new_gif = full_gif == NULL;
         if(show_gif(&full_gif, viewer, files[index].path,
-                    &settings, 800, 480)) {
+                    &settings, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT)) {
             if(new_gif) {
                 lv_obj_add_flag(full_gif, LV_OBJ_FLAG_CLICKABLE);
                 lv_obj_add_event_cb(full_gif, fullscreen_tapped, LV_EVENT_CLICKED, NULL);
@@ -646,7 +647,7 @@ static void wifi_open_pressed(lv_event_t *event)
 static void build_wifi(lv_obj_t *screen)
 {
     wifi_screen = lv_obj_create(screen);
-    lv_obj_set_size(wifi_screen, 800, 480);
+    lv_obj_set_size(wifi_screen, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
     style_box(wifi_screen, 0x08151C, 0);
     lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(wifi_screen, wifi_hide_keyboard, LV_EVENT_CLICKED, NULL);
@@ -697,7 +698,7 @@ static void build_wifi(lv_obj_t *screen)
     hostname_status_label = text(wifi_screen, "", 0xFDD835, 20, 370);
     lv_obj_set_width(hostname_status_label, 760);
     wifi_keyboard = lv_keyboard_create(wifi_screen);
-    lv_obj_set_size(wifi_keyboard, 800, 210);
+    lv_obj_set_size(wifi_keyboard, PHOTO_SCREEN_WIDTH, 210);
     lv_obj_align(wifi_keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_keyboard_set_textarea(wifi_keyboard, wifi_password);
     lv_obj_add_event_cb(wifi_keyboard, wifi_hide_keyboard, LV_EVENT_READY, NULL);
@@ -785,7 +786,7 @@ static void edit_open(lv_event_t *event)
 static void build_settings(lv_obj_t *screen)
 {
     settings_screen = lv_obj_create(screen);
-    lv_obj_set_size(settings_screen, 800, 480);
+    lv_obj_set_size(settings_screen, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
     style_box(settings_screen, 0x08151C, 0);
     lv_obj_clear_flag(settings_screen, LV_OBJ_FLAG_SCROLLABLE);
     text(settings_screen, "SETTINGS", 0xFFFFFF, 24, 20);
@@ -806,7 +807,7 @@ static void build_settings(lv_obj_t *screen)
 static void build_edit(lv_obj_t *screen)
 {
     edit_screen = lv_obj_create(screen);
-    lv_obj_set_size(edit_screen, 800, 480);
+    lv_obj_set_size(edit_screen, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
     style_box(edit_screen, 0x08151C, 0);
     lv_obj_clear_flag(edit_screen, LV_OBJ_FLAG_SCROLLABLE);
     text(edit_screen, "EDIT IMAGE", 0xFFFFFF, 18, 18);
@@ -826,17 +827,17 @@ static void build_edit(lv_obj_t *screen)
     text(edit_screen, "RESULT PREVIEW", 0xFFFFFF, 270, 56);
     lv_obj_t *frame = lv_obj_create(edit_screen);
     lv_obj_set_pos(frame, 270, 85);
-    lv_obj_set_size(frame, 484, 276);
+    lv_obj_set_size(frame, PHOTO_GALLERY_FRAME_WIDTH, PHOTO_GALLERY_FRAME_HEIGHT);
     style_box(frame, 0x000000, 8);
     lv_obj_set_style_border_color(frame, lv_color_hex(0x1565C0), 0);
     lv_obj_set_style_border_width(frame, 2, 0);
     lv_obj_clear_flag(frame, LV_OBJ_FLAG_SCROLLABLE);
     edit_preview_image = lv_image_create(frame);
     lv_obj_set_pos(edit_preview_image, 20, 4);
-    edit_status_label = text(edit_screen, "", 0xFDD835, 270, 367);
-    lv_obj_t *save = button(edit_screen, "SAVE", 0x00A152, 270, 400, 215, 44);
+    edit_status_label = text(edit_screen, "", 0xFDD835, 270, PHOTO_EDIT_STATUS_Y);
+    lv_obj_t *save = button(edit_screen, "SAVE", 0x00A152, 270, PHOTO_EDIT_BUTTON_Y, 215, 44);
     lv_obj_add_event_cb(save, edit_save, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *cancel = button(edit_screen, "CANCEL", 0x455A64, 539, 400, 215, 44);
+    lv_obj_t *cancel = button(edit_screen, "CANCEL", 0x455A64, 539, PHOTO_EDIT_BUTTON_Y, 215, 44);
     lv_obj_add_event_cb(cancel, edit_cancel, LV_EVENT_CLICKED, NULL);
     lv_obj_add_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
 }
@@ -844,32 +845,32 @@ static void build_edit(lv_obj_t *screen)
 static void build_gallery(lv_obj_t *screen)
 {
     gallery = lv_obj_create(screen);
-    lv_obj_set_size(gallery, 800, 480); lv_obj_clear_flag(gallery, LV_OBJ_FLAG_SCROLLABLE); style_box(gallery, 0x000000, 0);
+    lv_obj_set_size(gallery, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT); lv_obj_clear_flag(gallery, LV_OBJ_FLAG_SCROLLABLE); style_box(gallery, 0x000000, 0);
     lv_obj_set_style_pad_all(gallery, 0, 0);
-    lv_obj_t *head = lv_obj_create(gallery); lv_obj_set_size(head, 800, 68); style_box(head, 0x101010, 0);
+    lv_obj_t *head = lv_obj_create(gallery); lv_obj_set_size(head, PHOTO_SCREEN_WIDTH, 68); style_box(head, 0x101010, 0);
     lv_obj_t *badge = lv_obj_create(head); lv_obj_set_size(badge, 42, 42); lv_obj_set_pos(badge, 18, 13); style_box(badge, 0xE53935, 12); storage_label = text(badge, "PI", 0xFFFFFF, 11, 13);
     text(head, "PHOTO GALLERY", 0xFFFFFF, 72, 16); text(head, "Image library", 0x00BFA5, 72, 38);
     count_label = text(head, "FOLDER OFFLINE", 0xFDD835, 365, 25);
-    lv_obj_t *camera_button = button(head, "CAMERA", 0x7B1FA2, 455, 15, 105, 38);
+    lv_obj_t *camera_button = button(head, "CAMERA", 0x7B1FA2, PHOTO_GALLERY_CAMERA_X, 15, 105, 38);
     lv_obj_add_event_cb(camera_button, camera_open_pressed, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *settings = button(head, "SETTINGS", 0x455A64, 570, 15, 100, 38);
+    lv_obj_t *settings = button(head, "SETTINGS", 0x455A64, PHOTO_GALLERY_SETTINGS_X, 15, 100, 38);
     lv_obj_add_event_cb(settings, settings_open_pressed, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *refresh = button(head, "RESCAN", 0x1565C0, 680, 15, 102, 38); lv_obj_add_event_cb(refresh, rescan, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *refresh = button(head, "RESCAN", 0x1565C0, PHOTO_GALLERY_RESCAN_X, 15, 102, 38); lv_obj_add_event_cb(refresh, rescan, LV_EVENT_CLICKED, NULL);
 
-    lv_obj_t *left = lv_obj_create(gallery); lv_obj_set_pos(left, 18, 82); lv_obj_set_size(left, 242, 358); style_box(left, 0x101010, 16);
+    lv_obj_t *left = lv_obj_create(gallery); lv_obj_set_pos(left, 18, 82); lv_obj_set_size(left, 242, PHOTO_GALLERY_PANEL_HEIGHT); style_box(left, 0x101010, 16);
     text(left, "IMAGE LIBRARY", 0xFF00FF, 12, 12);
-    file_list = lv_obj_create(left); lv_obj_set_pos(file_list, 10, 39); lv_obj_set_size(file_list, 222, 190); style_box(file_list, 0x18232E, 8);
+    file_list = lv_obj_create(left); lv_obj_set_pos(file_list, 10, 39); lv_obj_set_size(file_list, 222, PHOTO_GALLERY_LIST_HEIGHT); style_box(file_list, 0x18232E, 8);
     lv_obj_set_style_pad_all(file_list, 0, 0); lv_obj_set_style_pad_row(file_list, 4, 0);
-    text(left, "Tap a file to load it", 0x00BFA5, 12, 238);
-    lv_obj_t *open = button(left, "OPEN SELECTED", 0xE53935, 10, 260, 222, 38); lv_obj_add_event_cb(open, open_selected, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *play = button(left, "PLAY SLIDESHOW", 0x00C853, 10, 304, 222, 38); lv_obj_add_event_cb(play, play_slideshow, LV_EVENT_CLICKED, NULL);
+    text(left, "Tap a file to load it", 0x00BFA5, 12, PHOTO_GALLERY_HINT_Y);
+    lv_obj_t *open = button(left, "OPEN SELECTED", 0xE53935, 10, PHOTO_GALLERY_OPEN_Y, 222, 38); lv_obj_add_event_cb(open, open_selected, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *play = button(left, "PLAY SLIDESHOW", 0x00C853, 10, PHOTO_GALLERY_PLAY_Y, 222, 38); lv_obj_add_event_cb(play, play_slideshow, LV_EVENT_CLICKED, NULL);
 
-    lv_obj_t *right = lv_obj_create(gallery); lv_obj_set_pos(right, 274, 82); lv_obj_set_size(right, 508, 358); style_box(right, 0x101010, 16);
+    lv_obj_t *right = lv_obj_create(gallery); lv_obj_set_pos(right, 274, 82); lv_obj_set_size(right, PHOTO_GALLERY_RIGHT_WIDTH, PHOTO_GALLERY_PANEL_HEIGHT); style_box(right, 0x101010, 16);
     text(right, "PREVIEW", 0x1565C0, 12, 12);
     selected_label = text(right, "Choose an image from the library", 0xFFFFFF, 12, 38);
-    lv_obj_set_width(selected_label, 360);
+    lv_obj_set_width(selected_label, PHOTO_GALLERY_LABEL_WIDTH);
     lv_label_set_long_mode(selected_label, LV_LABEL_LONG_DOT);
-    lv_obj_t *frame = lv_obj_create(right); lv_obj_set_pos(frame, 12, 62); lv_obj_set_size(frame, 484, 276); style_box(frame, 0x000000, 12);
+    lv_obj_t *frame = lv_obj_create(right); lv_obj_set_pos(frame, 12, 62); lv_obj_set_size(frame, PHOTO_GALLERY_FRAME_WIDTH, PHOTO_GALLERY_FRAME_HEIGHT); style_box(frame, 0x000000, 12);
     lv_obj_set_style_border_color(frame, lv_color_hex(0x1565C0), 0); lv_obj_set_style_border_width(frame, 2, 0);
     lv_obj_clear_flag(frame, LV_OBJ_FLAG_SCROLLABLE);
     preview_viewport = lv_obj_create(frame);
@@ -879,13 +880,13 @@ static void build_gallery(lv_obj_t *screen)
     lv_obj_clear_flag(preview_viewport, LV_OBJ_FLAG_SCROLLABLE);
     preview_image = lv_image_create(preview_viewport);
     lv_image_set_pivot(preview_image, 0, 0);
-    lv_obj_t *footer = lv_obj_create(gallery); lv_obj_set_pos(footer, 18, 448); lv_obj_set_size(footer, 764, 24); style_box(footer, 0x003D3A, 7);
+    lv_obj_t *footer = lv_obj_create(gallery); lv_obj_set_pos(footer, 18, PHOTO_GALLERY_FOOTER_Y); lv_obj_set_size(footer, PHOTO_GALLERY_FOOTER_WIDTH, 24); style_box(footer, 0x003D3A, 7);
     status_label = text(footer, "Scanning photo folder...", 0xFFFFFF, 8, 4);
 }
 
 static void build_viewer(lv_obj_t *screen)
 {
-    viewer = lv_obj_create(screen); lv_obj_set_size(viewer, 800, 480); lv_obj_clear_flag(viewer, LV_OBJ_FLAG_SCROLLABLE); style_box(viewer, 0x000000, 0);
+    viewer = lv_obj_create(screen); lv_obj_set_size(viewer, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT); lv_obj_clear_flag(viewer, LV_OBJ_FLAG_SCROLLABLE); style_box(viewer, 0x000000, 0);
     lv_obj_set_style_pad_all(viewer, 0, 0);
     full_image = lv_image_create(viewer); lv_obj_add_flag(full_image, LV_OBJ_FLAG_CLICKABLE); lv_obj_add_event_cb(full_image, fullscreen_tapped, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(viewer, fullscreen_tapped, LV_EVENT_CLICKED, NULL);

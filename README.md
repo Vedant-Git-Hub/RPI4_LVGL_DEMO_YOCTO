@@ -8,6 +8,30 @@ The stable 1.0 source release is tagged `stable-v1.0`. See
 [CHANGELOG.md](CHANGELOG.md) for its scope and validation. Build images are
 generated locally and are not stored in Git.
 
+### Experimental 7-inch DSI LCD (C) profile
+
+The `experimental/waveshare-7inch-1024x600` branch adds a separate profile for
+the Waveshare **7inch DSI LCD (C)**, 1024 × 600 capacitive touch panel. It uses
+the pinned Raspberry Pi kernel's `vc4-kms-dsi-waveshare-panel,7_0_inchC`
+overlay, its Waveshare panel driver, and the Goodix touch driver. A kernel
+overlay patch fixes this panel's touch range to 1024 × 600. The gallery,
+full-screen image rendering, editor preview, and camera preview use the new
+resolution. The default profiles below still target the 4.3-inch panel.
+
+Build the experimental USB or SD image:
+
+```bash
+./kas-container build kas/rpi4-photo-viewer-7inch.yml
+./kas-container build kas/rpi4-photo-viewer-7inch-sd.yml
+```
+
+To build and flash the matching image in one step, use `./flash.sh sdc usb
+7inch` for a USB drive, `./flash.sh sdc sd 7inch` for an SD card in a USB
+reader, or `./flash.sh mmcblk0 sd 7inch` for a built-in SD reader. The script
+asks for confirmation before erasing the selected drive. The hardware port
+has not been tested on the panel yet; verify display output, touch edges,
+camera preview, and gallery image fit after flashing.
+
 ## Gallery
 
 The touchscreen library scans up to 64 images in

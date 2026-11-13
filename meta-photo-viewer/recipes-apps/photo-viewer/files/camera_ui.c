@@ -1,5 +1,6 @@
 #include "camera_ui.h"
 #include "camera_backend.h"
+#include "display_layout.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -9,8 +10,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#define CAMERA_PREVIEW_WIDTH 560
-#define CAMERA_PREVIEW_HEIGHT 320
+#define CAMERA_PREVIEW_WIDTH PHOTO_CAMERA_PREVIEW_WIDTH
+#define CAMERA_PREVIEW_HEIGHT PHOTO_CAMERA_PREVIEW_HEIGHT
 #define CAMERA_CONFIG "/opt/photo-viewer/camera.conf"
 
 static const char *photo_dir;
@@ -386,10 +387,10 @@ void camera_ui_build(lv_obj_t *root, const char *photo_directory,
     saved_callback = on_saved;
     settings_back_callback = on_settings_back;
     camera_screen = lv_obj_create(root);
-    lv_obj_set_size(camera_screen, 800, 480);
+    lv_obj_set_size(camera_screen, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
     style(camera_screen, 0x08151C);
     camera_title = label(camera_screen, "USB CAMERA", 0xFFFFFF, 20, 22, 620);
-    lv_obj_t *back = button(camera_screen, "BACK", 0x455A64, 680, 12, 100, 42);
+    lv_obj_t *back = button(camera_screen, "BACK", 0x455A64, PHOTO_SCREEN_WIDTH - 120, 12, 100, 42);
     lv_obj_add_event_cb(back, back_pressed, LV_EVENT_CLICKED, NULL);
     lv_obj_t *window = lv_obj_create(camera_screen);
     lv_obj_set_pos(window, 18, 70);
@@ -408,14 +409,15 @@ void camera_ui_build(lv_obj_t *root, const char *photo_directory,
     camera_image = lv_image_create(window);
     lv_obj_set_pos(camera_image, 0, 0);
     if(preview_pixels) lv_image_set_src(camera_image, &preview_descriptor);
-    capture_button = button(camera_screen, "CAPTURE", 0x424B52, 604, 160, 170, 56);
+    capture_button = button(camera_screen, "CAPTURE", 0x424B52,
+                            PHOTO_SCREEN_WIDTH - 196, 160, 170, 56);
     lv_obj_add_event_cb(capture_button, capture_pressed, LV_EVENT_CLICKED, NULL);
     set_capture_enabled(0);
     camera_status = label(camera_screen, "Connect a USB camera.", 0x00BFA5,
-                          20, 418, 760);
+                          20, PHOTO_SCREEN_HEIGHT - 62, PHOTO_SCREEN_WIDTH - 40);
 
     settings_layer = lv_obj_create(root);
-    lv_obj_set_size(settings_layer, 800, 480);
+    lv_obj_set_size(settings_layer, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
     style(settings_layer, 0x08151C);
     label(settings_layer, "CAMERA SETTINGS", 0xFFFFFF, 30, 30, 700);
     label(settings_layer, "Resolution reported by the camera", 0x00BFA5,
@@ -433,7 +435,7 @@ void camera_ui_build(lv_obj_t *root, const char *photo_directory,
     lv_obj_add_flag(settings_layer, LV_OBJ_FLAG_HIDDEN);
 
     save_layer = lv_obj_create(root);
-    lv_obj_set_size(save_layer, 800, 480);
+    lv_obj_set_size(save_layer, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
     style(save_layer, 0x08151C);
     lv_obj_add_flag(save_layer, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(save_layer, keyboard_outside, LV_EVENT_CLICKED, NULL);
@@ -451,7 +453,7 @@ void camera_ui_build(lv_obj_t *root, const char *photo_directory,
     lv_obj_t *cancel_save = button(save_layer, "CANCEL", 0x455A64, 440, 194, 260, 52);
     lv_obj_add_event_cb(cancel_save, save_cancel, LV_EVENT_CLICKED, NULL);
     save_keyboard = lv_keyboard_create(save_layer);
-    lv_obj_set_size(save_keyboard, 800, 210);
+    lv_obj_set_size(save_keyboard, PHOTO_SCREEN_WIDTH, 210);
     lv_obj_align(save_keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_keyboard_set_textarea(save_keyboard, filename_field);
     lv_obj_add_event_cb(save_keyboard, keyboard_done, LV_EVENT_READY, NULL);

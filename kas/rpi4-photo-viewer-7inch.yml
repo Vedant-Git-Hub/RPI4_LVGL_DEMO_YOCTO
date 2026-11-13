@@ -1,0 +1,13 @@
+# Experimental Waveshare 7inch DSI LCD (C), 1024x600, USB boot.
+header:
+  version: 14
+  includes:
+    - kas/rpi4-photo-viewer.yml
+
+local_conf_header:
+  photo-viewer-7inch: |
+    PHOTO_VIEWER_7INCH = "1"
+    KERNEL_DEVICETREE:remove = "overlays/vc4-kms-dsi-waveshare-800x480.dtbo"
+    KERNEL_DEVICETREE:append = " overlays/vc4-kms-dsi-waveshare-panel.dtbo"
+    RPI_EXTRA_CONFIG = "dtoverlay=vc4-kms-dsi-waveshare-panel,7_0_inchC\ngpu_mem=128\nenable_uart=1"
+    IMAGE_BASENAME:pn-photo-viewer-image = "photo-viewer-image-7inch"

@@ -1,7 +1,9 @@
 # Raspberry Pi 4 photo viewer
 
-This Yocto project ports the ESP32 Raven gallery workflow to an 800 × 480
-Waveshare 4.3-inch DSI LCD on a Raspberry Pi 4. It uses LVGL on `/dev/fb0`
+This Yocto project ports the ESP32 Raven gallery workflow to a Raspberry Pi 4.
+The main branch supports the 800 × 480 Waveshare 4.3-inch DSI LCD and HDMI
+monitors. This experimental branch also supports the 1024 × 600 Waveshare
+7-inch DSI LCD (C). It uses LVGL on `/dev/fb0`
 and Linux services for storage, Wi-Fi, DHCP, mDNS, and image decoding.
 
 The stable 1.0 source release is tagged `stable-v1.0`. See
@@ -25,16 +27,15 @@ controller may not probe and `/dev/fb0` may never appear.
 Build the experimental USB or SD image:
 
 ```bash
-./kas-container build kas/rpi4-photo-viewer-7inch.yml
-./kas-container build kas/rpi4-photo-viewer-7inch-sd.yml
+./build 7_display
+./build 7_display sd
 ```
 
-To build and flash the matching image in one step, use `./flash.sh sdc usb
-7inch` for a USB drive, `./flash.sh sdc sd 7inch` for an SD card in a USB
-reader, or `./flash.sh mmcblk0 sd 7inch` for a built-in SD reader. The script
-asks for confirmation before erasing the selected drive. The hardware port
-has not been tested on the panel yet; verify display output, touch edges,
-camera preview, and gallery image fit after flashing.
+Then use `./flash.sh sdc` for the latest successful image (or replace `sdc`
+with the actual drive). Flashing does not build. The script asks for
+confirmation before erasing the selected drive. The hardware port has not
+been verified on the panel yet; check display output, touch edges, camera
+preview, and gallery image fit after flashing.
 
 ## Gallery
 
@@ -126,9 +127,13 @@ The manager has no login or TLS, so keep it on a trusted LAN.
 
 ## Build and boot
 
-Connect the panel ribbon to the Pi 4's 15-pin DSI connector. The profile
-enables the Waveshare `vc4-kms-dsi-waveshare-800x480` overlay; the GPIO
-header is not used for video.
+For the 4.3-inch panel, connect its ribbon to the Pi 4's 15-pin DSI connector.
+The `4_3_display` profile enables the Waveshare
+`vc4-kms-dsi-waveshare-800x480` overlay. The `hdmi_display` profile leaves
+the DSI overlay out and uses the HDMI monitor's detected mode. LVGL scales
+the 800 × 480 interface to fit that mode without stretching it. Connect a
+USB mouse to control the HDMI interface; the app displays a pointer when it
+finds no touchscreen.
 
 The first build fetches Poky, meta-openembedded, and meta-raspberrypi.
 Docker and substantial free disk space are required. If needed, download
@@ -139,29 +144,39 @@ curl -fsSL https://raw.githubusercontent.com/siemens/kas/master/kas-container -o
 chmod +x kas-container
 ```
 
-Build a USB or SD image directly:
+Build for the selected display and boot medium. USB boot is the default:
 
 ```bash
-./kas-container build kas/rpi4-photo-viewer.yml
-./kas-container build kas/rpi4-photo-viewer-sd.yml
+./build 4_3_display
+./build 4_3_display sd
+./build 7_display       # experimental branch only
+./build 7_display sd
+./build hdmi_display
+./build hdmi_display sd
 ```
 
 The USB image boots from `/dev/sda2`; the SD image boots from
-`/dev/mmcblk0p2`. Their output names differ in
-`build/tmp/deploy/images/raspberrypi4-64/`; Yocto may remove the earlier
-profile's image when switching profiles, so build the one you plan to flash.
+`/dev/mmcblk0p2`. Build artifacts are in
+`.kas-work/build/tmp/deploy/images/raspberrypi4-64/`. The `./build` script records
+the latest successful image and its checksum for `flash.sh`.
 
-For one-step build and flash, identify the target with `lsblk` and pass its
-whole drive name to the script:
+To flash that image later, identify the target with `lsblk` and pass its whole
+drive name to the script:
 
 ```bash
-./flash.sh sdc usb      # USB stick
-./flash.sh sdc sd       # SD card in a USB reader
-./flash.sh mmcblk0      # SD card in a built-in reader
+./flash.sh sdc           # USB stick or SD card in a USB reader
+./flash.sh sdc sd        # Also require that the latest image is for SD boot
+./flash.sh mmcblk0       # SD card in a built-in reader
 ```
 
-The second argument is optional. The script detects a direct SD reader and
-recognized SD card readers; otherwise it asks whether the target is USB or SD.
-It builds the matching image, checks its boot command line, shows the target,
-asks you to type the drive name to confirm, unmounts its partitions, and
-writes the image. All data on that drive is erased.
+Flashing does not build. It checks the saved image checksum, rejects a USB
+boot image for a built-in SD reader, shows the target, asks you to type its
+drive name to confirm, unmounts its partitions, and writes the image. All data
+on that drive is erased. The optional `usb` or `sd` argument checks the image
+type. To run KAS directly, set `KAS_WORK_DIR="$PWD/.kas-work"` and
+`KAS_BUILD_DIR="$PWD/.kas-work/build"`; the project's old `build/` output
+directory was moved to `.kas-work/build/` so
+`./build` can be a script.
+If another checkout still has a `build/` directory, move it to
+`.kas-work/build/` before pulling this change; Git cannot create the script
+while a directory named `build` is in its place.

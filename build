@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+build_dir="$project_dir/.kas-work/build"
+deploy_dir="$build_dir/tmp/deploy/images/raspberrypi4-64"
+
+usage() {
+    printf 'Usage: %s {4_3_display|7_display|hdmi_display} [usb|sd]\n' "${0##*/}" >&2
+    printf 'Examples: %s 7_display, %s hdmi_display sd\n' "${0##*/}" "${0##*/}" >&2
+}
+
+if [[ $# -lt 1 || $# -gt 2 ]]; then usage; exit 2; fi
+display=$1
+media=${2:-usb}
+if [[ $media != usb && $media != sd ]]; then usage; exit 2; fi
+
+case "$display:$media" in
+    4_3_display:usb) profile=kas/rpi4-photo-viewer.yml; image_base=photo-viewer-image; overlay=vc4-kms-dsi-waveshare-800x480; root=/dev/sda2 ;;
+    4_3_display:sd) profile=kas/rpi4-photo-viewer-sd.yml; image_base=photo-viewer-image-sd; overlay=vc4-kms-dsi-waveshare-800x480; root=/dev/mmcblk0p2 ;;
+    hdmi_display:usb) profile=kas/rpi4-photo-viewer-hdmi.yml; image_base=photo-viewer-image-hdmi; overlay=; root=/dev/sda2 ;;
+    hdmi_display:sd) profile=kas/rpi4-photo-viewer-hdmi-sd.yml; image_base=photo-viewer-image-hdmi-sd; overlay=; root=/dev/mmcblk0p2 ;;
+    7_display:usb) profile=kas/rpi4-photo-viewer-7inch.yml; image_base=photo-viewer-image-7inch; overlay=vc4-kms-dsi-waveshare-panel; root=/dev/sda2 ;;
+    7_display:sd) profile=kas/rpi4-photo-viewer-7inch-sd.yml; image_base=photo-viewer-image-7inch-sd; overlay=vc4-kms-dsi-waveshare-panel; root=/dev/mmcblk0p2 ;;
+    *) usage; exit 2 ;;
+esac
+
+for command in sha256sum readlink mktemp; do
+    if ! command -v "$command" >/dev/null 2>&1; then
+        printf 'Required command is missing: %s\n' "$command" >&2
+        exit 1
+    fi
+done
+if [[ ! -x $project_dir/kas-container ]]; then
+    printf 'kas-container is missing. Follow the setup instructions in README.md.\n' >&2
+    exit 1
+fi
+
+cd -- "$project_dir"
+mkdir -p -- "$build_dir"
+export KAS_BUILD_DIR="$build_dir"
+export KAS_WORK_DIR="$project_dir/.kas-work"
+./kas-container build "$profile"
+
+image_link="$deploy_dir/$image_base-raspberrypi4-64.rootfs.wic.bz2"
+if [[ ! -r $image_link ]]; then
+    printf 'Build succeeded, but the expected image is missing: %s\n' "$image_link" >&2
+    exit 1
+fi
+image=$(readlink -f -- "$image_link")
+image_file=${image##*/}
+if [[ $image != "$deploy_dir/$image_file" || $image_file != "$image_base-raspberrypi4-64.rootfs-"*.wic.bz2 ]]; then
+    printf 'Unexpected image path: %s\n' "$image" >&2
+    exit 1
+fi
+
+cmdline="$deploy_dir/bootfiles/cmdline.txt"
+config="$deploy_dir/bootfiles/config.txt"
+if [[ ! -r $cmdline || ! -r $config ]]; then
+    printf 'Boot configuration is missing; the image was not recorded as flashable.\n' >&2
+    exit 1
+fi
+cmdline_text=$(<"$cmdline")
+config_text=$(<"$config")
+if [[ " $cmdline_text " != *" root=$root "* ]]; then
+    printf 'Boot root partition does not match the selected %s image.\n' "$media" >&2
+    exit 1
+fi
+if [[ -n $overlay ]]; then
+    overlay_line="dtoverlay=$overlay"
+    if [[ $display == 7_display ]]; then overlay_line+=",7_0_inchC,i2c1"; fi
+    if [[ $config_text != *"$overlay_line"* || ! -r $deploy_dir/$overlay.dtbo ]]; then
+        printf 'Boot configuration does not contain the selected display overlay.\n' >&2
+        exit 1
+    fi
+elif [[ $config_text == *"dtoverlay=vc4-kms-dsi-"* ]]; then
+    printf 'HDMI image unexpectedly includes a DSI display overlay.\n' >&2
+    exit 1
+fi
+
+checksum=$(sha256sum -- "$image")
+checksum=${checksum%% *}
+record=$(mktemp "$build_dir/latest-image.XXXXXX")
+trap 'rm -f -- "$record"' EXIT
+printf '%s\t%s\t%s\t%s\n' "$display" "$media" "$image_file" "$checksum" > "$record"
+mv -f -- "$record" "$build_dir/latest-image.tsv"
+trap - EXIT
+printf 'Built %s (%s boot): %s\n' "$display" "$media" "$image"
+printf 'Flash it with: ./flash.sh DRIVE\n'

@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- Add an SD boot profile and make `flash.sh` build the matching USB or SD
-  image before flashing. It asks for the medium when a USB card reader cannot
-  be distinguished from a USB stick.
+- Add separate `./build` and `flash.sh` commands. The build script records the
+  latest successful image; flashing verifies its checksum and writes it
+  without rebuilding.
+- Add USB and SD build profiles for the 4.3-inch DSI panel and HDMI output.
+  HDMI scales the LVGL interface to the detected mode and accepts a USB mouse.
 - Use the SD root partition for photos when booting from SD, leaving the
   firmware boot partition untouched by the gallery.
 

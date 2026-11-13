@@ -1,0 +1,10 @@
+# Raspberry Pi 4 HDMI output, SD boot.
+header:
+  version: 14
+  includes:
+    - kas/rpi4-photo-viewer-hdmi.yml
+
+local_conf_header:
+  photo-viewer-hdmi-sd: |
+    PHOTO_VIEWER_BOOT_MEDIA = "sd"
+    IMAGE_BASENAME:pn-photo-viewer-image = "photo-viewer-image-hdmi-sd"

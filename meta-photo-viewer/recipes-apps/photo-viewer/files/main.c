@@ -502,10 +502,20 @@ static int is_touch_name(const char *name)
     return strstr(lower, "touch") || strstr(lower, "ft5") || strstr(lower, "goodix") || strstr(lower, "edt");
 }
 
+static int is_mouse_name(const char *name)
+{
+    char lower[256]; size_t i, length = strlen(name);
+    if(length >= sizeof(lower)) length = sizeof(lower) - 1;
+    for(i = 0; i < length; i++) lower[i] = name[i] >= 'A' && name[i] <= 'Z' ? name[i] + 32 : name[i];
+    lower[length] = '\0';
+    return strstr(lower, "mouse") != NULL;
+}
+
 static void enable_touch(void)
 {
     DIR *directory = opendir("/dev/input");
     struct dirent *entry;
+    char mouse_path[128] = {0};
     if(directory == NULL) return;
     while((entry = readdir(directory)) != NULL) {
         char path[128], name[256] = {0}; int fd;
@@ -515,9 +525,25 @@ static void enable_touch(void)
         if(fd < 0) continue;
         (void)ioctl(fd, EVIOCGNAME(sizeof(name)), name);
         close(fd);
-        if(is_touch_name(name) && lv_evdev_create(LV_INDEV_TYPE_POINTER, path)) break;
+        if(is_touch_name(name) && lv_evdev_create(LV_INDEV_TYPE_POINTER, path)) {
+            closedir(directory);
+            return;
+        }
+        if(!mouse_path[0] && is_mouse_name(name)) snprintf(mouse_path, sizeof(mouse_path), "%s", path);
     }
     closedir(directory);
+    if(mouse_path[0]) {
+        lv_indev_t *mouse = lv_evdev_create(LV_INDEV_TYPE_POINTER, mouse_path);
+        if(mouse) {
+            lv_obj_t *cursor = lv_obj_create(lv_layer_top());
+            lv_obj_set_size(cursor, 14, 14);
+            style_box(cursor, 0xFFFFFF, 7);
+            lv_obj_set_style_border_color(cursor, lv_color_hex(0x101010), 0);
+            lv_obj_set_style_border_width(cursor, 2, 0);
+            lv_obj_clear_flag(cursor, LV_OBJ_FLAG_CLICKABLE);
+            lv_indev_set_cursor(mouse, cursor);
+        }
+    }
 }
 
 static void wifi_poll(lv_timer_t *timer)
@@ -901,9 +927,27 @@ int main(void)
     lv_linux_fbdev_set_file(display, "/dev/fb0");
     enable_touch();
     lv_obj_t *screen = lv_screen_active(); style_box(screen, 0x000000, 0);
-    build_gallery(screen); build_viewer(screen); build_wifi(screen);
-    build_edit(screen); build_settings(screen);
-    camera_ui_build(screen, PHOTO_DIR, camera_back, camera_saved, camera_settings_back);
+    /* Scale the 800x480 LVGL layout to any HDMI framebuffer size.  LVGL
+     * transforms pointer hit tests with the parent, so mouse clicks remain
+     * aligned with buttons after scaling. */
+    lv_obj_t *layout = lv_obj_create(screen);
+    lv_obj_set_size(layout, 800, 480);
+    style_box(layout, 0x000000, 0);
+    lv_obj_clear_flag(layout, LV_OBJ_FLAG_SCROLLABLE);
+    int display_width = lv_display_get_horizontal_resolution(display);
+    int display_height = lv_display_get_vertical_resolution(display);
+    int scale_x = display_width * 256 / 800;
+    int scale_y = display_height * 256 / 480;
+    int scale = scale_x < scale_y ? scale_x : scale_y;
+    if(scale < 1) scale = 1;
+    lv_obj_set_pos(layout, (display_width - 800 * scale / 256) / 2,
+                   (display_height - 480 * scale / 256) / 2);
+    lv_obj_set_style_transform_pivot_x(layout, 0, 0);
+    lv_obj_set_style_transform_pivot_y(layout, 0, 0);
+    lv_obj_set_style_transform_scale(layout, scale, 0);
+    build_gallery(layout); build_viewer(layout); build_wifi(layout);
+    build_edit(layout); build_settings(layout);
+    camera_ui_build(layout, PHOTO_DIR, camera_back, camera_saved, camera_settings_back);
     sd_boot = root_is_sd_card();
     refresh_card_mount();
     scan_files();

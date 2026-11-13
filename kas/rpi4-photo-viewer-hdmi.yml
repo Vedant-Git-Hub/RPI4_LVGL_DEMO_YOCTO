@@ -1,0 +1,10 @@
+# Raspberry Pi 4 HDMI output, USB boot. KMS uses the monitor's EDID mode.
+header:
+  version: 14
+  includes:
+    - kas/rpi4-photo-viewer.yml
+
+local_conf_header:
+  photo-viewer-hdmi: |
+    PHOTO_VIEWER_DISPLAY = "hdmi_display"
+    IMAGE_BASENAME:pn-photo-viewer-image = "photo-viewer-image-hdmi"

@@ -1,4 +1,5 @@
 /build/
+/.kas-work/
 /downloads/
 /sstate-cache/
 /kas-container

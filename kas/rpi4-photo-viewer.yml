@@ -24,7 +24,7 @@ repos:
       .:
 
   meta-photo-viewer:
-    path: .
+    path: /repo
     layers:
       meta-photo-viewer:
 
@@ -40,13 +40,16 @@ local_conf_header:
     # for 90 seconds when the KMS display is still probing.
     SPLASH = ""
 
-    # The image boots from USB mass storage on the Pi 4.
-    CMDLINE_ROOT_PARTITION = "/dev/sda2"
+    # The build wrapper selects USB or SD boot. Defaults keep the 4.3-inch
+    # USB image usable with this profile directly.
+    PHOTO_VIEWER_BOOT_MEDIA ??= "usb"
+    PHOTO_VIEWER_DISPLAY ??= "4_3_display"
+    CMDLINE_ROOT_PARTITION = "${@'/dev/mmcblk0p2' if d.getVar('PHOTO_VIEWER_BOOT_MEDIA') == 'sd' else '/dev/sda2'}"
     # Keep the kernel/systemd console off fb0.  LVGL owns that framebuffer.
     # With only fb0 present, fbcon=map:1 deliberately maps consoles to the
     # nonexistent fb1 instead of overwriting the LVGL screen and cursor.
     CMDLINE_DEBUG = "fbcon=map:1 console=serial0,115200"
-    WKS_FILE = "usb-raspberrypi.wks"
+    WKS_FILE = "${@'sdimage-raspberrypi.wks' if d.getVar('PHOTO_VIEWER_BOOT_MEDIA') == 'sd' else 'usb-raspberrypi.wks'}"
 
     # Required by the Raspberry Pi 4 BSP for its onboard Wi-Fi/Bluetooth
     # firmware package (linux-firmware-rpidistro).
@@ -58,7 +61,7 @@ local_conf_header:
 
     # Waveshare 4.3inch DSI LCD (Rev 2.2, 800x480) on the Pi 4's DSI1 port.
     # vc4-kms-v3d is already enabled by the Raspberry Pi machine configuration.
-    RPI_EXTRA_CONFIG = "dtoverlay=vc4-kms-dsi-waveshare-800x480\ngpu_mem=128\nenable_uart=1"
+    RPI_EXTRA_CONFIG = "${@'' if d.getVar('PHOTO_VIEWER_DISPLAY') == 'hdmi_display' else 'dtoverlay=vc4-kms-dsi-waveshare-800x480\\n'}gpu_mem=128\nenable_uart=1"
 
 target:
   - photo-viewer-image

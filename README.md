@@ -17,6 +17,10 @@ overlay, its Waveshare panel driver, and the Goodix touch driver. A kernel
 overlay patch fixes this panel's touch range to 1024 × 600. The gallery,
 full-screen image rendering, editor preview, and camera preview use the new
 resolution. The default profiles below still target the 4.3-inch panel.
+Waveshare specifies the `i2c1` overlay option for this model. On a Pi 4,
+connect both the 15-pin DSI ribbon and the four-wire cable carrying 5 V,
+ground, SDA1, and SCL1. Without the four-wire connection, the display's
+controller may not probe and `/dev/fb0` may never appear.
 
 Build the experimental USB or SD image:
 

@@ -58,7 +58,7 @@ local_conf_header:
 
     # Waveshare 4.3inch DSI LCD (Rev 2.2, 800x480) on the Pi 4's DSI1 port.
     # vc4-kms-v3d is already enabled by the Raspberry Pi machine configuration.
-    RPI_EXTRA_CONFIG = "dtoverlay=${@'vc4-kms-dsi-waveshare-panel,7_0_inchC' if d.getVar('PHOTO_VIEWER_7INCH') == '1' else 'vc4-kms-dsi-waveshare-800x480'}\ngpu_mem=128\nenable_uart=1"
+    RPI_EXTRA_CONFIG = "dtoverlay=${@'vc4-kms-dsi-waveshare-panel,7_0_inchC,i2c1' if d.getVar('PHOTO_VIEWER_7INCH') == '1' else 'vc4-kms-dsi-waveshare-800x480'}\ngpu_mem=128\nenable_uart=1"
 
 target:
   - photo-viewer-image

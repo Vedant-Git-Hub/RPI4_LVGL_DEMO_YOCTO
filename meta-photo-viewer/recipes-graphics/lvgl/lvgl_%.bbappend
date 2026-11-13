@@ -10,6 +10,7 @@ SRC_URI:append = " file://0001-bmp-fix-file-open-result.patch file://0002-gif-ac
 # ImageMagick renders originals into temporary BMP frames for LVGL.
 do_configure:append() {
     sed -i \
+        -e 's/^    #define LV_MEM_SIZE (64 \* 1024U)/    #define LV_MEM_SIZE (512 * 1024U)/' \
         -e 's/^#define LV_USE_FS_STDIO 0/#define LV_USE_FS_STDIO 1/' \
         -e "s/^    #define LV_FS_STDIO_LETTER .*$/    #define LV_FS_STDIO_LETTER 'A'/" \
         -e 's/^#define LV_USE_BMP 0/#define LV_USE_BMP 1/' \

@@ -301,6 +301,7 @@ static int preview_yuyv(camera_device_t *camera, uint8_t *preview,
             uint8_t *pixel = preview + ((size_t)(y + top) * width + x + left) * 3;
             yuyv_pixel(camera->last_frame, camera->stride, source_x, source_y,
                        pixel);
+            /* LVGL's RGB888 framebuffer stores these bytes in B, G, R order. */
             uint8_t swap = pixel[0]; pixel[0] = pixel[2]; pixel[2] = swap;
         }
     }

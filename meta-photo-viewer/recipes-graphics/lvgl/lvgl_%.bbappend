@@ -7,6 +7,8 @@ PACKAGECONFIG:append = " fbdev"
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 SRC_URI:append = " file://0001-bmp-fix-file-open-result.patch file://0002-gif-accept-87a-and-local-palettes.patch"
 
+# The gallery, settings, and camera keyboards exhaust LVGL's default 64 KiB
+# object heap during startup. Keep enough headroom for menus and image views.
 # ImageMagick renders originals into temporary BMP frames for LVGL.
 do_configure:append() {
     sed -i \

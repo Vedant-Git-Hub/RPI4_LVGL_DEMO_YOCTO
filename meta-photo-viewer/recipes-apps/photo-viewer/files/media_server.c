@@ -377,6 +377,7 @@ static int listen_port(unsigned int port)
 static void *server_main(void *unused)
 {
     (void)unused;
+    /* Port 80 lets users enter the .local name alone; 8080 keeps old links. */
     struct pollfd listeners[2] = {
         {.fd = listen_port(80), .events = POLLIN},
         {.fd = listen_port(8080), .events = POLLIN}

@@ -4,6 +4,10 @@ This Yocto project ports the ESP32 Raven gallery workflow to an 800 × 480
 Waveshare 4.3-inch DSI LCD on a Raspberry Pi 4. It uses LVGL on `/dev/fb0`
 and Linux services for storage, Wi-Fi, DHCP, mDNS, and image decoding.
 
+The stable 1.0 source release is tagged `stable-v1.0`. See
+[CHANGELOG.md](CHANGELOG.md) for its scope and validation. Build images are
+generated locally and are not stored in Git.
+
 ## Gallery
 
 The touchscreen library scans up to 64 images in
@@ -33,8 +37,9 @@ name and choose **Save** or **Cancel**. Saved photos are JPEGs in the active
 gallery storage, including the SD card when mounted, and appear in the image
 library. Back closes the camera.
 
-**Settings → Camera Settings** lists resolutions reported by the camera. Choose one and tap
-**Apply**; the choice is saved across boots in `/opt/photo-viewer/camera.conf`.
+**Settings → Camera Settings** lists resolutions reported by the camera.
+Choose one and tap **Apply**; the choice is saved across boots in
+`/opt/photo-viewer/camera.conf`.
 The viewer supports USB cameras that expose MJPEG or YUYV through Video4Linux2.
 Where a camera offers both formats at one resolution, Settings lists both so
 you can choose the one that works best with your camera. Modes up to
@@ -71,8 +76,9 @@ and ImageMagick's resource limits.
 
 ## Wi-Fi and browser manager
 
-Tap **Settings → Network Settings** on the gallery screen to scan nearby networks, select an SSID,
-enter its password with the on-screen keyboard, and connect. The connection
+Tap **Settings → Network Settings** on the gallery screen to scan nearby
+networks, select an SSID, enter its password with the on-screen keyboard,
+and connect. The connection
 profile is saved in `/etc/photo-viewer-wpa.conf` and reconnects after reboot.
 The keyboard opens when a text field is tapped and closes when you tap
 outside it.

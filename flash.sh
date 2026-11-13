@@ -47,6 +47,8 @@ if [[ $confirmation != "$drive" ]]; then
 fi
 
 sudo -v
+# Abort if a partition cannot be unmounted; writing a mounted filesystem
+# would leave the running system and the flashed image inconsistent.
 while IFS= read -r partition; do
     if findmnt -rn -S "$partition" >/dev/null; then
         printf 'Unmounting %s\n' "$partition"

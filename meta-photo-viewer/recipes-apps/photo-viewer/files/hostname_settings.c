@@ -50,6 +50,8 @@ static int restart_avahi(void)
 int photo_hostname_apply(const char *name)
 {
     if(!photo_hostname_valid(name)) return 0;
+    /* /etc/hostname keeps the name across boots; sethostname and Avahi
+     * publish it immediately on the current network. */
     char temporary[] = HOSTNAME_FILE ".XXXXXX";
     int fd = mkstemp(temporary);
     if(fd < 0) return 0;

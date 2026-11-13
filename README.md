@@ -112,3 +112,13 @@ The compressed USB-bootable image is
 `build/tmp/deploy/images/raspberrypi4-64/photo-viewer-image-raspberrypi4-64.rootfs.wic.bz2`.
 Flash it to USB mass storage and boot the Pi 4 from USB. The profile sets
 the root partition to `/dev/sda2`.
+
+To flash, identify the USB drive with `lsblk`, then pass its whole drive name
+to the script. For example, if the drive is `/dev/sdc`:
+
+```bash
+./flash.sh sdc
+```
+
+The script shows the target drive, asks you to type its name to confirm,
+unmounts its partitions, and writes the image. All data on that drive is erased.

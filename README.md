@@ -25,6 +25,23 @@ photo, including photos on an SD card. The original image is not modified.
 The browser manager keeps these settings when copying or renaming a photo and
 removes them when deleting one.
 
+## USB camera
+
+Connect a USB UVC camera and tap **Camera** on the gallery screen. The camera
+screen shows a live preview. Tap **Capture** to freeze a photo, then enter a
+name and choose **Save** or **Cancel**. Saved photos are JPEGs in the active
+gallery storage, including the SD card when mounted, and appear in the image
+library. Back closes the camera.
+
+**Settings** lists resolutions reported by the camera. Choose one and tap
+**Apply**; the choice is saved across boots in `/opt/photo-viewer/camera.conf`.
+The viewer supports USB cameras that expose MJPEG or YUYV through Video4Linux2.
+Where a camera offers both formats at one resolution, Settings lists both so
+you can choose the one that works best with your camera. Modes up to
+4096 × 2160 are listed.
+The image includes the Linux `uvcvideo` driver and libjpeg-turbo. If the
+camera is disconnected, the screen reports it and retries automatically.
+
 With USB boot, an optional FAT32, exFAT, or ext4 microSD card in the Pi's
 card slot is mounted over the photo directory automatically. Its first
 partition must appear as `/dev/mmcblk0p1`. The badge shows **SD** while the

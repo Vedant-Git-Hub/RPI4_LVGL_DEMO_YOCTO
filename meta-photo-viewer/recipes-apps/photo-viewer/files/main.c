@@ -17,6 +17,7 @@
 #include "media_server.h"
 #include "image_convert.h"
 #include "wifi_control.h"
+#include "camera_ui.h"
 
 #define PHOTO_DIR "/opt/photo-viewer/photos"
 #define CARD_DEVICE "/dev/mmcblk0p1"
@@ -317,6 +318,7 @@ static void scan_files(void)
 static void show_gallery(const char *message)
 {
     if(slideshow_timer) lv_timer_pause(slideshow_timer);
+    camera_ui_close();
     if(full_gif) lv_gif_pause(full_gif);
     if(preview_gif) lv_gif_restart(preview_gif);
     clear_edit_preview();
@@ -326,6 +328,34 @@ static void show_gallery(const char *message)
     lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(gallery, LV_OBJ_FLAG_HIDDEN);
     if(message) set_status(message);
+}
+
+static void camera_open_pressed(lv_event_t *event)
+{
+    (void)event;
+    if(preview_gif) lv_gif_pause(preview_gif);
+    lv_obj_add_flag(gallery, LV_OBJ_FLAG_HIDDEN);
+    camera_ui_open();
+}
+
+static void camera_back(void)
+{
+    show_gallery("Back in the image library.");
+}
+
+static void camera_saved(const char *name)
+{
+    char message[192];
+    show_gallery(NULL);
+    scan_files();
+    for(int index = 0; index < file_count; index++) {
+        if(!strcmp(files[index].name, name)) {
+            select_file(index);
+            break;
+        }
+    }
+    snprintf(message, sizeof(message), "Saved %s to the image library.", name);
+    set_status(message);
 }
 
 static void fullscreen_tapped(lv_event_t *event)
@@ -403,7 +433,8 @@ static void card_poll(lv_timer_t *timer)
     (void)timer;
     if(refresh_card_mount()) {
         if(!lv_obj_has_flag(viewer, LV_OBJ_FLAG_HIDDEN) ||
-           !lv_obj_has_flag(edit_screen, LV_OBJ_FLAG_HIDDEN)) show_gallery(NULL);
+           !lv_obj_has_flag(edit_screen, LV_OBJ_FLAG_HIDDEN) ||
+           camera_ui_is_open()) show_gallery(NULL);
         scan_files();
     }
 }
@@ -701,7 +732,9 @@ static void build_gallery(lv_obj_t *screen)
     lv_obj_t *head = lv_obj_create(gallery); lv_obj_set_size(head, 800, 68); style_box(head, 0x101010, 0);
     lv_obj_t *badge = lv_obj_create(head); lv_obj_set_size(badge, 42, 42); lv_obj_set_pos(badge, 18, 13); style_box(badge, 0xE53935, 12); storage_label = text(badge, "PI", 0xFFFFFF, 11, 13);
     text(head, "PHOTO GALLERY", 0xFFFFFF, 72, 16); text(head, "Image library", 0x00BFA5, 72, 38);
-    count_label = text(head, "FOLDER OFFLINE", 0xFDD835, 450, 25);
+    count_label = text(head, "FOLDER OFFLINE", 0xFDD835, 365, 25);
+    lv_obj_t *camera_button = button(head, "CAMERA", 0x7B1FA2, 455, 15, 105, 38);
+    lv_obj_add_event_cb(camera_button, camera_open_pressed, LV_EVENT_CLICKED, NULL);
     lv_obj_t *wifi = button(head, "WI-FI", 0x455A64, 570, 15, 100, 38); lv_obj_add_event_cb(wifi, wifi_open_pressed, LV_EVENT_CLICKED, NULL);
     lv_obj_t *refresh = button(head, "RESCAN", 0x1565C0, 680, 15, 102, 38); lv_obj_add_event_cb(refresh, rescan, LV_EVENT_CLICKED, NULL);
 
@@ -754,6 +787,7 @@ int main(void)
     enable_touch();
     lv_obj_t *screen = lv_screen_active(); style_box(screen, 0x000000, 0);
     build_gallery(screen); build_viewer(screen); build_wifi(screen); build_edit(screen);
+    camera_ui_build(screen, PHOTO_DIR, camera_back, camera_saved);
     refresh_card_mount();
     scan_files();
     lv_timer_create(card_poll, 5000, NULL);

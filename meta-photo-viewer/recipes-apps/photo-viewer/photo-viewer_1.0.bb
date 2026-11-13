@@ -1,9 +1,9 @@
 SUMMARY = "LVGL touchscreen photo gallery and browser media server"
 LICENSE = "MIT"
-PR = "r11"
+PR = "r12"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
-DEPENDS = "lvgl"
+DEPENDS = "lvgl libjpeg-turbo"
 
 SRC_URI = " \
     file://main.c \
@@ -15,6 +15,10 @@ SRC_URI = " \
     file://image_settings.h \
     file://wifi_control.c \
     file://wifi_control.h \
+    file://camera_backend.c \
+    file://camera_backend.h \
+    file://camera_ui.c \
+    file://camera_ui.h \
     file://index.html \
     file://Makefile \
     file://panel-simple.conf \
@@ -71,7 +75,7 @@ do_install() {
         ${D}${sysconfdir}/modules-load.d/photo-viewer-panel.conf
 }
 
-RDEPENDS:${PN} += "lvgl kernel-module-panel-simple imagemagick wpa-supplicant wpa-supplicant-cli"
+RDEPENDS:${PN} += "lvgl kernel-module-panel-simple kernel-module-uvcvideo imagemagick wpa-supplicant wpa-supplicant-cli"
 FILES:${PN} += " \
     /opt/photo-viewer/photos \
     ${datadir}/photo-viewer/index.html \

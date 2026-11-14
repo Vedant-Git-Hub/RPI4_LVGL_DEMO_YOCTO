@@ -16,6 +16,7 @@
 
 #define CAMERA_BUFFERS 4
 #define CAMERA_MAX_PIXELS (4096u * 2160u)
+#define CAMERA_CONFIG "/opt/photo-viewer/camera.conf"
 
 typedef struct {
     void *address;
@@ -67,6 +68,34 @@ static int supported_format(uint32_t format)
 const char *camera_format_name(uint32_t format)
 {
     return format == V4L2_PIX_FMT_YUYV ? "YUYV" : "MJPEG";
+}
+
+int camera_settings_read(uint32_t *width, uint32_t *height, uint32_t *format)
+{
+    if(!width || !height || !format) return 0;
+    FILE *file = fopen(CAMERA_CONFIG, "r");
+    if(!file) return 0;
+    *format = 0; /* Older settings files recorded only the resolution. */
+    int valid = fscanf(file, "%u %u %u", width, height, format) >= 2;
+    fclose(file);
+    return valid;
+}
+
+int camera_settings_write(const camera_mode_t *mode)
+{
+    if(!mode) return 0;
+    char temporary[] = CAMERA_CONFIG ".XXXXXX";
+    int descriptor = mkstemp(temporary);
+    if(descriptor < 0) return 0;
+    FILE *file = fdopen(descriptor, "w");
+    if(!file) { close(descriptor); unlink(temporary); return 0; }
+    int okay = fprintf(file, "%u %u %u\n", mode->width, mode->height,
+                       mode->format) > 0 &&
+               fflush(file) == 0 && fsync(descriptor) == 0;
+    if(fclose(file)) okay = 0;
+    if(okay) okay = rename(temporary, CAMERA_CONFIG) == 0;
+    if(!okay) unlink(temporary);
+    return okay;
 }
 
 static void add_mode(camera_mode_t *modes, size_t capacity, int *count,

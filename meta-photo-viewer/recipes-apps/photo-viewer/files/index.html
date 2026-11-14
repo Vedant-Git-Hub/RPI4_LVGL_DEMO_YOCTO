@@ -7,7 +7,7 @@
   body { font: 16px system-ui; margin: 20px auto; padding: 0 16px; max-width: 850px; color: #f5f7fa; background: #101820 }
   h1 { margin-bottom: 4px }
   p { color: #b9c8d3 }
-  button, input { font: inherit; padding: 8px; margin: 4px }
+  button, input, select { font: inherit; padding: 8px; margin: 4px }
   button { cursor: pointer; background: #1565c0; color: white; border: 0; border-radius: 5px }
   a { color: #64d8cb }
   li { padding: 9px 0; border-bottom: 1px solid #456; display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
@@ -15,12 +15,19 @@
   progress { width: min(300px, 100%) }
   #camera-panel { margin: 16px 0; padding: 12px; border: 1px solid #456; border-radius: 8px }
   #camera-view { display: block; width: 100%; max-height: 65vh; object-fit: contain; background: #000; aspect-ratio: 4 / 3 }
+  .camera-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 }
   #camera-panel[hidden], progress[hidden] { display: none }
 </style>
 <h1>Photo Gallery</h1>
 <p>Upload original photos or capture from the USB camera connected to the Pi.</p>
 <button id="live-camera">Live camera</button>
 <section id="camera-panel" hidden>
+  <div class="camera-controls">
+    <label for="camera-mode">Capture resolution</label>
+    <select id="camera-mode" disabled></select>
+    <button id="camera-apply" disabled>Apply</button>
+    <button id="camera-reload">Refresh modes</button>
+  </div>
   <img id="camera-view" alt="Live USB camera preview">
   <p id="camera-status" role="status">Connecting to camera...</p>
   <button id="camera-capture" disabled>Capture</button>
@@ -45,33 +52,107 @@ const cameraView = document.querySelector('#camera-view');
 const cameraStatus = document.querySelector('#camera-status');
 const cameraCapture = document.querySelector('#camera-capture');
 const liveCameraButton = document.querySelector('#live-camera');
+const cameraModeSelect = document.querySelector('#camera-mode');
+const cameraApply = document.querySelector('#camera-apply');
+const cameraReload = document.querySelector('#camera-reload');
 let cameraReady = false;
+let cameraModes = [];
 
-liveCameraButton.onclick = () => {
-  liveCameraButton.hidden = true;
-  cameraPanel.hidden = false;
+async function loadCameraModes() {
+  cameraModeSelect.disabled = true;
+  cameraApply.disabled = true;
+  const response = await fetch('/api/camera/settings');
+  if (!response.ok) throw Error(await response.text());
+  const settings = await response.json();
+  cameraModes = settings.modes;
+  cameraModeSelect.replaceChildren();
+  for (const [index, mode] of cameraModes.entries()) {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = `${mode.width} × ${mode.height} (${mode.name})`;
+    cameraModeSelect.append(option);
+  }
+  cameraModeSelect.value = String(settings.selected);
+  cameraModeSelect.disabled = false;
+  cameraApply.disabled = false;
+}
+
+function startCameraPreview() {
   cameraReady = false;
   cameraCapture.disabled = true;
   cameraStatus.textContent = 'Connecting to camera...';
   cameraView.src = '/api/camera/stream?time=' + Date.now();
-};
-document.querySelector('#camera-close').onclick = () => {
+}
+
+function stopCameraPreview() {
   cameraView.removeAttribute('src');
-  cameraPanel.hidden = true;
-  liveCameraButton.hidden = false;
   cameraReady = false;
   cameraCapture.disabled = true;
+}
+
+async function waitForCameraRelease() {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const response = await fetch('/api/camera/status');
+    if (!response.ok) throw Error('Could not check camera status');
+    if (!(await response.json()).streaming) return;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw Error('Camera is still busy; close the other preview and retry');
+}
+
+liveCameraButton.onclick = async () => {
+  liveCameraButton.hidden = true;
+  cameraPanel.hidden = false;
+  cameraStatus.textContent = 'Loading camera settings...';
+  try {
+    await loadCameraModes();
+    if (!cameraPanel.hidden) startCameraPreview();
+  } catch (error) {
+    cameraStatus.textContent = 'Could not load camera settings: ' + error.message;
+  }
+};
+document.querySelector('#camera-close').onclick = () => {
+  stopCameraPreview();
+  cameraPanel.hidden = true;
+  liveCameraButton.hidden = false;
 };
 cameraView.onload = () => {
+  if (cameraPanel.hidden) return;
   if (cameraReady) return;
   cameraReady = true;
   cameraCapture.disabled = false;
-  cameraStatus.textContent = 'Live camera ready.';
+  cameraStatus.textContent = `Live camera ready at ${cameraModeSelect.selectedOptions[0]?.textContent || 'the selected resolution'}.`;
 };
 cameraView.onerror = () => {
+  if (cameraPanel.hidden || !cameraView.hasAttribute('src')) return;
   cameraReady = false;
   cameraCapture.disabled = true;
   cameraStatus.textContent = 'Could not start the camera. Check that the USB camera is connected and not open on the Pi.';
+};
+cameraReload.onclick = async () => {
+  try {
+    await loadCameraModes();
+    cameraStatus.textContent = 'Camera modes refreshed.';
+  } catch (error) {
+    cameraStatus.textContent = 'Could not refresh camera modes: ' + error.message;
+  }
+};
+cameraApply.onclick = async () => {
+  const mode = cameraModes[Number(cameraModeSelect.value)];
+  if (!mode) return;
+  cameraApply.disabled = true;
+  stopCameraPreview();
+  cameraStatus.textContent = 'Applying camera resolution...';
+  try {
+    await waitForCameraRelease();
+    const query = new URLSearchParams({width: mode.width, height: mode.height, format: mode.format});
+    await request('/api/camera/settings?' + query, {method: 'POST'});
+    if (!cameraPanel.hidden) startCameraPreview();
+  } catch (error) {
+    cameraStatus.textContent = 'Could not apply camera resolution: ' + error.message;
+  } finally {
+    cameraApply.disabled = cameraModeSelect.disabled;
+  }
 };
 cameraCapture.onclick = async () => {
   cameraCapture.disabled = true;

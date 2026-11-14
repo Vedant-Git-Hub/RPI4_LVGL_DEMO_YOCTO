@@ -12,7 +12,6 @@
 
 #define CAMERA_PREVIEW_WIDTH PHOTO_CAMERA_PREVIEW_WIDTH
 #define CAMERA_PREVIEW_HEIGHT PHOTO_CAMERA_PREVIEW_HEIGHT
-#define CAMERA_CONFIG "/opt/photo-viewer/camera.conf"
 
 static const char *photo_dir;
 static void (*back_callback)(void);
@@ -90,31 +89,6 @@ static void clear_pending(void)
     pending_size = 0;
 }
 
-static int saved_resolution(uint32_t *width, uint32_t *height, uint32_t *format)
-{
-    FILE *file = fopen(CAMERA_CONFIG, "r");
-    if(!file) return 0;
-    *format = 0;
-    int valid = fscanf(file, "%u %u %u", width, height, format) >= 2;
-    fclose(file);
-    return valid;
-}
-
-static void remember_resolution(const camera_mode_t *mode)
-{
-    char temporary[] = CAMERA_CONFIG ".XXXXXX";
-    int descriptor = mkstemp(temporary);
-    if(descriptor < 0) return;
-    FILE *file = fdopen(descriptor, "w");
-    if(!file) { close(descriptor); unlink(temporary); return; }
-    int okay = fprintf(file, "%u %u %u\n", mode->width, mode->height,
-                       mode->format) > 0 &&
-               fflush(file) == 0 && fsync(descriptor) == 0;
-    if(fclose(file)) okay = 0;
-    if(okay) okay = rename(temporary, CAMERA_CONFIG) == 0;
-    if(!okay) unlink(temporary);
-}
-
 static void start_mode(int index)
 {
     if(camera) { camera_stop(camera); camera = NULL; }
@@ -163,7 +137,7 @@ static void probe_camera(void)
     }
     lv_dropdown_set_options(settings_dropdown, options);
     uint32_t desired_width = 0, desired_height = 0, desired_format = 0;
-    int remembered = saved_resolution(&desired_width, &desired_height,
+    int remembered = camera_settings_read(&desired_width, &desired_height,
                                        &desired_format);
     int chosen = 0;
     for(int i = 0; i < mode_count; i++) {
@@ -345,7 +319,7 @@ static void settings_pressed(lv_event_t *event)
         }
         lv_dropdown_set_options(settings_dropdown, options);
         uint32_t width = 0, height = 0, format = 0;
-        int remembered = saved_resolution(&width, &height, &format);
+        int remembered = camera_settings_read(&width, &height, &format);
         int chosen = 0;
         for(int i = 0; i < mode_count; i++) {
             if(remembered && modes[i].width == width && modes[i].height == height &&
@@ -373,7 +347,10 @@ static void settings_apply(lv_event_t *event)
         lv_label_set_text(settings_status, "No camera resolution is available.");
         return;
     }
-    remember_resolution(&modes[index]);
+    if(!camera_settings_write(&modes[index])) {
+        lv_label_set_text(settings_status, "Could not save camera settings.");
+        return;
+    }
     lv_obj_add_flag(settings_layer, LV_OBJ_FLAG_HIDDEN);
     if(settings_back_callback) settings_back_callback();
 }

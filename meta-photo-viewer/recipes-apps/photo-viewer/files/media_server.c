@@ -9,7 +9,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
-#include <linux/videodev2.h>
 #include <pthread.h>
 #include <poll.h>
 #include <stdatomic.h>
@@ -36,7 +35,6 @@ static size_t camera_frame_size;
 static int camera_streaming;
 static atomic_int active_clients;
 
-#define CAMERA_CONFIG "/opt/photo-viewer/camera.conf"
 #define MAX_CLIENTS 16
 
 static int file_path(const char *name, char *path, size_t capacity);
@@ -71,30 +69,87 @@ static void error_reply(int fd, int code, const char *reason, const char *messag
     reply(fd, code, reason, "text/plain; charset=utf-8", message, strlen(message));
 }
 
-static camera_mode_t web_camera_mode(const camera_mode_t *modes, int count)
+static int camera_mode_choice(const camera_mode_t *modes, int count)
 {
-    unsigned int width = 0, height = 0, format = 0;
-    FILE *config = fopen(CAMERA_CONFIG, "r");
-    int saved = 0;
-    if(config) {
-        saved = fscanf(config, "%u %u %u", &width, &height, &format) >= 2;
-        fclose(config);
-    }
+    uint32_t width = 0, height = 0, format = 0;
+    int saved = camera_settings_read(&width, &height, &format);
     int choice = 0;
     for(int i = 0; i < count; i++) {
         if(saved && modes[i].width == width && modes[i].height == height &&
-           (!format || modes[i].format == format)) { choice = i; break; }
+           (!format || modes[i].format == format)) return i;
         if(!saved && modes[i].width == 640 && modes[i].height == 480) {
             choice = i; break;
         }
     }
-    /* MJPEG at the selected resolution is forwarded without reencoding. */
-    if(modes[choice].format == V4L2_PIX_FMT_YUYV)
-        for(int i = 0; i < count; i++)
-            if(modes[i].width == modes[choice].width &&
-               modes[i].height == modes[choice].height &&
-               modes[i].format == V4L2_PIX_FMT_MJPEG) return modes[i];
-    return modes[choice];
+    return choice;
+}
+
+static void camera_status(int fd)
+{
+    pthread_mutex_lock(&camera_lock);
+    int streaming = camera_streaming;
+    pthread_mutex_unlock(&camera_lock);
+    const char *json = streaming ? "{\"streaming\":true}" : "{\"streaming\":false}";
+    reply(fd, 200, "OK", "application/json", json, strlen(json));
+}
+
+static void list_camera_modes(int fd)
+{
+    camera_mode_t modes[CAMERA_MAX_MODES];
+    char path[64], name[64];
+    int count = camera_discover(path, sizeof(path), name, sizeof(name),
+                                modes, CAMERA_MAX_MODES);
+    if(count <= 0) {
+        error_reply(fd, 503, "Service Unavailable", "No supported USB camera found");
+        return;
+    }
+    char json[8192];
+    size_t used = 0;
+    int length = snprintf(json, sizeof(json), "{\"selected\":%d,\"modes\":[",
+                          camera_mode_choice(modes, count));
+    if(length < 0 || (size_t)length >= sizeof(json)) goto overflow;
+    used = (size_t)length;
+    for(int i = 0; i < count; i++) {
+        length = snprintf(json + used, sizeof(json) - used,
+                          "%s{\"width\":%u,\"height\":%u,\"format\":%u,\"name\":\"%s\"}",
+                          i ? "," : "", modes[i].width, modes[i].height,
+                          modes[i].format, camera_format_name(modes[i].format));
+        if(length < 0 || (size_t)length >= sizeof(json) - used - 2) goto overflow;
+        used += (size_t)length;
+    }
+    json[used++] = ']'; json[used++] = '}';
+    reply(fd, 200, "OK", "application/json", json, used);
+    return;
+overflow:
+    error_reply(fd, 500, "Internal Server Error", "Camera mode list is too large");
+}
+
+static void set_camera_mode(int fd, const char *target)
+{
+    unsigned int width = 0, height = 0, format = 0;
+    int end = 0;
+    if(sscanf(target, "/api/camera/settings?width=%u&height=%u&format=%u%n",
+              &width, &height, &format, &end) != 3 || !end || target[end]) {
+        error_reply(fd, 400, "Bad Request", "Invalid camera mode");
+        return;
+    }
+    camera_mode_t modes[CAMERA_MAX_MODES];
+    char path[64], name[64];
+    int count = camera_discover(path, sizeof(path), name, sizeof(name),
+                                modes, CAMERA_MAX_MODES);
+    if(count <= 0) {
+        error_reply(fd, 503, "Service Unavailable", "No supported USB camera found");
+        return;
+    }
+    for(int i = 0; i < count; i++) {
+        if(modes[i].width == width && modes[i].height == height &&
+           modes[i].format == format) {
+            if(camera_settings_write(&modes[i])) error_reply(fd, 200, "OK", "Camera settings saved");
+            else error_reply(fd, 500, "Internal Server Error", "Could not save camera settings");
+            return;
+        }
+    }
+    error_reply(fd, 400, "Bad Request", "Camera does not support that mode");
 }
 
 static void stream_camera(int fd)
@@ -112,7 +167,8 @@ static void stream_camera(int fd)
     char path[64], name[64], error[128] = {0};
     int count = camera_discover(path, sizeof(path), name, sizeof(name),
                                 modes, CAMERA_MAX_MODES);
-    camera_mode_t mode = count > 0 ? web_camera_mode(modes, count) : (camera_mode_t){0};
+    camera_mode_t mode = count > 0 ? modes[camera_mode_choice(modes, count)] :
+                                      (camera_mode_t){0};
     camera_device_t *camera = count > 0 ?
         camera_start(path, &mode, error, sizeof(error)) : NULL;
     if(!camera) {
@@ -465,6 +521,11 @@ static void serve_client(int fd)
         serve_page(fd); return;
     }
     if(!strcmp(method, "GET") && !strcmp(target, "/api/files")) { list_files(fd); return; }
+    if(!strcmp(method, "GET") && !strcmp(target, "/api/camera/status")) { camera_status(fd); return; }
+    if(!strcmp(method, "GET") && !strcmp(target, "/api/camera/settings")) { list_camera_modes(fd); return; }
+    if(!strcmp(method, "POST") && !strncmp(target, "/api/camera/settings?", 21)) {
+        set_camera_mode(fd, target); return;
+    }
     if(!strcmp(method, "GET") &&
        (!strcmp(target, "/api/camera/stream") ||
         !strncmp(target, "/api/camera/stream?", 19))) { stream_camera(fd); return; }

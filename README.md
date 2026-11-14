@@ -176,9 +176,11 @@ download, copy, rename, or delete stored files. Upload progress is shown.
 Tap **Live camera** to view the Pi's USB camera in the browser, then **Capture**
 to save the current JPEG to the Pi gallery and download the same photo to the
 browser device. The browser chooses its usual Downloads folder or asks where to
-save, according to its settings. **Back** closes the stream. The web preview
-uses the resolution saved in Camera Settings and forwards MJPEG frames directly
-when the camera offers that format; YUYV cameras are encoded as JPEG. Only one
+save, according to its settings. Choose **Capture resolution** and tap **Apply**
+to restart the web preview in that camera mode. The mode is fetched from the USB
+camera and saved across reboots; it is the same setting used by the Pi's Camera
+Settings screen. **Back** closes the stream. The web preview forwards MJPEG frames directly
+when an MJPEG mode is selected; YUYV modes are encoded as JPEG. Only one
 camera preview can own the USB camera at a time, either on the Pi or in a
 browser. If the camera is busy, close the other preview and reopen Live camera.
 The manager has no login or TLS, so keep it on a trusted LAN.

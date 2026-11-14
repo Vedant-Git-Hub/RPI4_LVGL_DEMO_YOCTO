@@ -25,7 +25,9 @@ trap cleanup EXIT
 tar -C "$stage" -xf "$bundle"
 if [[ ! -f $stage/rootfs.tar.bz2 || ! -f $stage/tftp/start4.elf ||
       ! -f $stage/tftp/config.txt || ! -f $stage/tftp/cmdline.txt ||
-      ! -f $stage/tftp/kernel8.img || ! -f $stage/tftp/bcm2711-rpi-4-b.dtb ]]; then
+      ! -f $stage/tftp/kernel8.img || ! -f $stage/tftp/bcm2711-rpi-4-b.dtb ||
+      ! -f $stage/tftp/overlays/overlay_map.dtb ||
+      ! -f $stage/tftp/overlays/vc4-kms-v3d-pi4.dtbo ]]; then
     printf 'Network boot bundle is incomplete.\n' >&2
     exit 1
 fi
@@ -40,8 +42,11 @@ mkdir "$stage/rootfs"
 tar --numeric-owner -C "$stage/rootfs" -xjf "$stage/rootfs.tar.bz2"
 # Gallery content and device settings survive an image redeployment.
 for path in opt/photo-viewer/photos opt/photo-viewer/camera.conf \
-    etc/photo-viewer-wpa.conf etc/hostname; do
-    if [[ -e $base/rootfs/$path ]]; then
+    etc/photo-viewer-wpa.conf etc/hostname \
+    etc/systemd/system/photo-viewer-boot-diagnostics.service \
+    etc/systemd/system/basic.target.wants/photo-viewer-boot-diagnostics.service \
+    usr/local/sbin/photo-viewer-boot-diagnostics; do
+    if [[ -e $base/rootfs/$path || -L $base/rootfs/$path ]]; then
         mkdir -p -- "$stage/rootfs/$(dirname "$path")"
         rm -rf -- "$stage/rootfs/$path"
         cp -a -- "$base/rootfs/$path" "$stage/rootfs/$path"

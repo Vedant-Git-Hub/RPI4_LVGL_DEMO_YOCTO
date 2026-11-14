@@ -75,7 +75,9 @@ if [[ $media == net ]]; then
     if [[ " $cmdline_text " != *" nfsroot=10.42.0.1:/srv/photo-viewer-netboot/rootfs,vers=3,tcp "* ||
           " $cmdline_text " != *" ip=dhcp "* ||
           ! -r $deploy_dir/Image || ! -r $deploy_dir/bcm2711-rpi-4-b.dtb ||
-          ! -r $deploy_dir/vc4-kms-v3d.dtbo ]]; then
+          ! -r $deploy_dir/vc4-kms-v3d.dtbo ||
+          ! -r $deploy_dir/vc4-kms-v3d-pi4.dtbo ||
+          ! -r $deploy_dir/overlay_map.dtb ]]; then
         printf 'Network boot files or NFS kernel command line are incomplete.\n' >&2
         exit 1
     fi
@@ -103,6 +105,10 @@ if [[ $media == net ]]; then
     install -m 0644 "$deploy_dir/Image" "$staging/tftp/kernel8.img"
     install -m 0644 "$deploy_dir/bcm2711-rpi-4-b.dtb" "$staging/tftp/bcm2711-rpi-4-b.dtb"
     install -m 0644 "$deploy_dir/vc4-kms-v3d.dtbo" "$staging/tftp/overlays/vc4-kms-v3d.dtbo"
+    # Firmware maps vc4-kms-v3d to the Pi 4 variant through overlay_map.dtb.
+    # Without the map, Linux has no DRM framebuffer and the LVGL service waits.
+    install -m 0644 "$deploy_dir/overlay_map.dtb" "$staging/tftp/overlays/overlay_map.dtb"
+    install -m 0644 "$deploy_dir/vc4-kms-v3d-pi4.dtbo" "$staging/tftp/overlays/vc4-kms-v3d-pi4.dtbo"
     if [[ -n $overlay ]]; then
         install -m 0644 "$deploy_dir/$overlay.dtbo" "$staging/tftp/overlays/$overlay.dtbo"
     fi

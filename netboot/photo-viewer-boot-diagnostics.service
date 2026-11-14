@@ -1,0 +1,10 @@
+[Unit]
+Description=Capture Photo Viewer network boot diagnostics
+After=systemd-journald.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/photo-viewer-boot-diagnostics
+
+[Install]
+WantedBy=basic.target

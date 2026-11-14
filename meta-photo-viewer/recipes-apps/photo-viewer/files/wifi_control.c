@@ -126,8 +126,24 @@ void wifi_status(char *message, size_t capacity)
         snprintf(message, capacity, "Wi-Fi service unavailable");
         return;
     }
-    if(!strstr(output, "wpa_state=COMPLETED")) {
-        snprintf(message, capacity, "Wi-Fi disconnected or connecting");
+    char state[32] = {0};
+    const char *field = strstr(output, "wpa_state=");
+    if(field) (void)sscanf(field, "wpa_state=%31s", state);
+    if(strcmp(state, "COMPLETED")) {
+        char networks[4096];
+        if(cli(networks, sizeof(networks), "list_networks", NULL, NULL, NULL) &&
+           strstr(networks, "[TEMP-DISABLED]"))
+            snprintf(message, capacity, "Wi-Fi rejected; check password or router security");
+        else if(!strcmp(state, "4WAY_HANDSHAKE") ||
+           !strcmp(state, "GROUP_HANDSHAKE"))
+            snprintf(message, capacity, "Wi-Fi authenticating with router...");
+        else if(!strcmp(state, "ASSOCIATING") || !strcmp(state, "ASSOCIATED"))
+            snprintf(message, capacity, "Wi-Fi associating with router...");
+        else if(!strcmp(state, "SCANNING"))
+            snprintf(message, capacity, "Wi-Fi scanning for saved network...");
+        else if(!strcmp(state, "INACTIVE"))
+            snprintf(message, capacity, "No Wi-Fi network selected");
+        else snprintf(message, capacity, "Wi-Fi disconnected; check password or router");
         return;
     }
     struct ifaddrs *addresses;

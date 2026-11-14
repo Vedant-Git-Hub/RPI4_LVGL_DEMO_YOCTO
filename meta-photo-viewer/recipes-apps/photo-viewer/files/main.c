@@ -577,6 +577,13 @@ static void wifi_poll(lv_timer_t *timer)
     char status[128];
     wifi_status(status, sizeof(status));
     lv_label_set_text(wifi_status_label, status);
+    if(!strncmp(status, "http://", 7)) lv_textarea_set_text(wifi_password, "");
+}
+
+static void wifi_password_visibility_changed(lv_event_t *event)
+{
+    lv_textarea_set_password_mode(wifi_password,
+        !lv_obj_has_state(lv_event_get_target(event), LV_STATE_CHECKED));
 }
 
 static void wifi_hide_keyboard(lv_event_t *event)
@@ -640,7 +647,6 @@ static void wifi_connect_pressed(lv_event_t *event)
     if(wifi_connect(lv_textarea_get_text(wifi_ssid),
                     lv_textarea_get_text(wifi_password))) {
         lv_label_set_text(wifi_status_label, "Connecting; saved for future boots...");
-        lv_textarea_set_text(wifi_password, "");
     } else lv_label_set_text(wifi_status_label, "Could not save Wi-Fi connection. Check SSID and password.");
 }
 
@@ -725,12 +731,17 @@ static void build_wifi(lv_obj_t *screen)
     text(wifi_screen, "Password", 0xFFFFFF, 400, 158);
     wifi_password = lv_textarea_create(wifi_screen);
     lv_obj_set_pos(wifi_password, 400, 180);
-    lv_obj_set_size(wifi_password, 370, 42);
+    lv_obj_set_size(wifi_password, 280, 42);
     lv_textarea_set_one_line(wifi_password, true);
     lv_textarea_set_password_mode(wifi_password, true);
     lv_textarea_set_max_length(wifi_password, 63);
     lv_obj_add_event_cb(wifi_password, wifi_field_pressed, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(wifi_password, wifi_hide_keyboard, LV_EVENT_READY, NULL);
+    lv_obj_t *show_password = lv_checkbox_create(wifi_screen);
+    lv_obj_set_pos(show_password, 690, 191);
+    lv_checkbox_set_text(show_password, "Show");
+    lv_obj_add_event_cb(show_password, wifi_password_visibility_changed,
+                        LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_t *connect = button(wifi_screen, "CONNECT AND SAVE", 0x00A152, 400, 226, 370, 38);
     lv_obj_add_event_cb(connect, wifi_connect_pressed, LV_EVENT_CLICKED, NULL);
     text(wifi_screen, "Local web address (name before .local)", 0xFFFFFF, 20, 284);

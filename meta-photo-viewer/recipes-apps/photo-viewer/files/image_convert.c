@@ -1,4 +1,5 @@
 #include "image_convert.h"
+#include "display_layout.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -67,7 +68,8 @@ int image_convert_to_bmp_edit(const char *source, const char *name_hint,
     if(!settings || settings->rotation > 270 || settings->rotation % 90 ||
        (settings->mode != IMAGE_FIT_WHOLE &&
         settings->mode != IMAGE_FILL_DISPLAY) ||
-       width == 0 || height == 0 || width > 800 || height > 480 ||
+       width == 0 || height == 0 || width > PHOTO_SCREEN_WIDTH ||
+       height > PHOTO_SCREEN_HEIGHT ||
        output_size < sizeof("/run/photo-viewer/slide-XXXXXX.bmp")) return 0;
     if(mkdir("/run/photo-viewer", 0755) && errno != EEXIST) return 0;
     char temporary[] = "/run/photo-viewer/slide-XXXXXX.bmp";

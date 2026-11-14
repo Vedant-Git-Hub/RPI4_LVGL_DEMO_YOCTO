@@ -71,6 +71,7 @@ library. Back closes the camera.
 **Settings → Camera Settings** lists resolutions reported by the camera.
 Choose one and tap **Apply**; the choice is saved across boots in
 `/opt/photo-viewer/camera.conf`.
+Captured JPEGs open in the gallery at the selected display resolution.
 The viewer supports USB cameras that expose MJPEG or YUYV through Video4Linux2.
 Where a camera offers both formats at one resolution, Settings lists both so
 you can choose the one that works best with your camera. Modes up to
@@ -116,6 +117,10 @@ and connect. The connection
 profile is saved in `/etc/photo-viewer-wpa.conf` and reconnects after reboot.
 The keyboard opens when a text field is tapped and closes when you tap
 outside it.
+Use **Show** beside the password field to verify what was typed. The password
+stays in the field until the Pi connects, so a failed attempt can be corrected.
+The status line shows scanning, association, authentication, or a temporarily
+rejected network when those states are reported by `wpa_supplicant`.
 The status line shows the Pi's address after DHCP completes. Ethernet can
 also reach the web manager.
 

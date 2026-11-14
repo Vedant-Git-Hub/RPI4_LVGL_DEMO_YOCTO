@@ -15,8 +15,10 @@ generated locally and are not stored in Git.
 The `experimental/waveshare-7inch-1024x600` branch adds a separate profile for
 the Waveshare **7inch DSI LCD (C)**, 1024 × 600 capacitive touch panel. It uses
 the pinned Raspberry Pi kernel's `vc4-kms-dsi-waveshare-panel,7_0_inchC`
-overlay, its Waveshare panel driver, and the Goodix touch driver. A kernel
-overlay patch fixes this panel's touch range to 1024 × 600. The gallery,
+overlay, its Waveshare panel driver, and the Goodix touch driver. The kernel
+overlay exposes an 800 × 480 touch range; the application reads the Linux
+input device's axis limits and maps them across the 1024 × 600 framebuffer.
+The gallery,
 full-screen image rendering, editor preview, and camera preview use the new
 resolution. The default profiles below still target the 4.3-inch panel.
 Waveshare specifies the `i2c1` overlay option for this model. On a Pi 4,

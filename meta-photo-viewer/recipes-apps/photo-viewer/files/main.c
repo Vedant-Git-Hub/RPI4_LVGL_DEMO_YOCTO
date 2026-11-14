@@ -512,6 +512,13 @@ static int is_mouse_name(const char *name)
     return strstr(lower, "mouse") != NULL;
 }
 
+static int touch_axis_range(int fd, unsigned int mt_axis, unsigned int axis,
+                            struct input_absinfo *range)
+{
+    if(ioctl(fd, EVIOCGABS(mt_axis), range) == 0) return 1;
+    return ioctl(fd, EVIOCGABS(axis), range) == 0;
+}
+
 static void enable_touch(void)
 {
     DIR *directory = opendir("/dev/input");
@@ -520,15 +527,31 @@ static void enable_touch(void)
     if(directory == NULL) return;
     while((entry = readdir(directory)) != NULL) {
         char path[128], name[256] = {0}; int fd;
+        struct input_absinfo x_range, y_range;
+        int has_ranges;
         if(strncmp(entry->d_name, "event", 5) != 0) continue;
         snprintf(path, sizeof(path), "/dev/input/%s", entry->d_name);
         fd = open(path, O_RDONLY | O_NONBLOCK);
         if(fd < 0) continue;
         (void)ioctl(fd, EVIOCGNAME(sizeof(name)), name);
+        has_ranges = touch_axis_range(fd, ABS_MT_POSITION_X, ABS_X, &x_range) &&
+                     touch_axis_range(fd, ABS_MT_POSITION_Y, ABS_Y, &y_range) &&
+                     x_range.maximum > x_range.minimum && y_range.maximum > y_range.minimum;
         close(fd);
-        if(is_touch_name(name) && lv_evdev_create(LV_INDEV_TYPE_POINTER, path)) {
-            closedir(directory);
-            return;
+        if(is_touch_name(name)) {
+            lv_indev_t *touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, path);
+            if(touch) {
+                if(has_ranges) {
+                    lv_evdev_set_calibration(touch, x_range.minimum, y_range.minimum,
+                                             x_range.maximum, y_range.maximum);
+                    fprintf(stderr, "photo-viewer: touch %s (%s), X %d..%d, Y %d..%d\n",
+                            path, name, x_range.minimum, x_range.maximum,
+                            y_range.minimum, y_range.maximum);
+                }
+                else fprintf(stderr, "photo-viewer: touch %s (%s) has no absolute axis range\n", path, name);
+                closedir(directory);
+                return;
+            }
         }
         if(!mouse_path[0] && is_mouse_name(name)) snprintf(mouse_path, sizeof(mouse_path), "%s", path);
     }

@@ -66,8 +66,15 @@ build after powering the Pi off:
 firmware and NFS root. It preserves photos, camera settings, Wi-Fi settings,
 and the saved hostname from the previous NFS root. For USB/SD cards, continue
 using `./flash.sh DRIVE`. A direct Ethernet connection is required for this
-profile; Wi-Fi cannot provide the initial network boot. This branch is
-experimental until tested on the Pi hardware.
+profile; Wi-Fi cannot provide the initial network boot. The 7-inch profile
+has been booted on a Pi 4 with working gallery display, Goodix touch, NFS
+root, and browser manager. The 4.3-inch and HDMI network profiles still need
+hardware testing.
+
+If a future network boot reaches Linux but the gallery stays black, run
+`sudo ./netboot/diagnose.sh` on the host and reboot the Pi. The report appears
+at `/srv/photo-viewer-netboot/rootfs/opt/photo-viewer/boot-diagnostics.log`
+after about a minute. Run `sudo ./netboot/diagnose.sh --remove` when finished.
 
 ## Gallery
 

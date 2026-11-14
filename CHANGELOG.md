@@ -8,7 +8,14 @@
   `./build DISPLAY net` packages the root filesystem and matching boot files
   together; `./flash.sh net` deploys the verified bundle without rebuilding.
 - Preserve gallery photos and saved camera, Wi-Fi, and hostname settings when
-  replacing a network-boot image. Pi hardware validation remains outstanding.
+  replacing a network-boot image.
+- Fix Pi 4 network boot discovery with the Raspberry Pi PXE service response;
+  include `overlay_map.dtb` and `vc4-kms-v3d-pi4.dtbo` so the Pi creates the
+  DSI framebuffer. Add a boot diagnostic collector for host-side debugging.
+
+The 7-inch profile was validated on a Pi 4: Ethernet DHCP, TFTP, NFS root,
+gallery display and touch, and the browser manager all work. The 4.3-inch and
+HDMI network profiles have not yet been tested on hardware.
 
 ## Stable version 2.0 — 2026-11-14
 

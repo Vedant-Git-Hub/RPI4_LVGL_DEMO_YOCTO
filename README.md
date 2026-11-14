@@ -41,6 +41,18 @@ confirmation before erasing the selected drive. The project owner has
 confirmed display, touch, camera capture, gallery opening, and Wi-Fi on this
 panel.
 
+## Boot splash
+
+The startup screen shows **Welcome to Vedant's Photo Gallary!** and
+**Loading please wait...** in large, bold yellow text. The
+`photo-viewer-splash` service paints it directly to `/dev/fb0` as soon as the
+Linux display driver exposes the framebuffer. LVGL shows the same artwork
+while building the gallery, then removes it when the main screen is ready.
+The 7-inch DSI panel is initialized by the Linux driver, so it stays blank
+during the earlier Pi bootloader phase. Raspberry Pi's current early custom
+splash support does not initialize MIPI DSI displays in firmware.
+
+
 ## Experimental wired network boot
 
 The `experimental/rpi4-netboot` branch adds a Pi 4 Ethernet boot profile for

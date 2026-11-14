@@ -1,7 +1,7 @@
 [Unit]
 Description=LVGL photo gallery
-After=systemd-modules-load.service systemd-udev-settle.service
-Wants=systemd-udev-settle.service
+After=systemd-modules-load.service systemd-udev-settle.service photo-viewer-splash.service
+Wants=systemd-udev-settle.service photo-viewer-splash.service
 
 [Service]
 Type=simple

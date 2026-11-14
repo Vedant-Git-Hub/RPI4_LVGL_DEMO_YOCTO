@@ -84,9 +84,12 @@ meta-photo-viewer/recipes-apps/photo-viewer/files/
 ├── image_settings.c/.h           Saved per-image rotation and Fit/Fill
 ├── media_server.c/.h             HTTP photo manager
 ├── index.html                    Browser interface
+├── boot_splash.c                 Paint the startup artwork to /dev/fb0
+├── boot-splash.bmp               Bold yellow welcome message
 ├── wifi_control.c/.h             Wi-Fi scan and connection control
 ├── hostname_settings.c/.h        Editable local hostname
 ├── photo-viewer.service          Start the gallery after framebuffer setup
+├── photo-viewer-splash.service   Show artwork before the gallery starts
 ├── photo-viewer-wifi.service     Start Wi-Fi authentication
 ├── photo-viewer-wpa.conf         Initial Wi-Fi configuration
 ├── 20-photo-viewer-wlan.network  WLAN DHCP configuration

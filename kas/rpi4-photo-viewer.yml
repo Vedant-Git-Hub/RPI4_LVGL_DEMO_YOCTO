@@ -35,9 +35,9 @@ local_conf_header:
     INIT_MANAGER = "systemd"
     hostname:pn-base-files = "vedantsphotogallary"
 
-    # A dedicated LVGL appliance does not use a boot splash.  psplash has a
-    # hard dependency on the legacy fb0 sysfs path and otherwise delays boot
-    # for 90 seconds when the KMS display is still probing.
+    # Use the photo-viewer-splash service once the KMS framebuffer exists.
+    # psplash depends on a legacy fb0 sysfs path and can delay this boot by
+    # 90 seconds while the DSI panel is probing.
     SPLASH = ""
 
     # The build wrapper selects USB or SD boot. Defaults keep the 4.3-inch

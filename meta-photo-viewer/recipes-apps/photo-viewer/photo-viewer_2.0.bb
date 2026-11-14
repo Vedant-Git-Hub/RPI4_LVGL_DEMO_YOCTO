@@ -11,6 +11,8 @@ SRC_URI = " \
     file://display_layout.h \
     file://media_server.c \
     file://media_server.h \
+    file://boot_splash.c \
+    file://boot-splash.bmp \
     file://image_convert.c \
     file://image_convert.h \
     file://image_settings.c \
@@ -27,6 +29,7 @@ SRC_URI = " \
     file://Makefile \
     file://panel-simple.conf \
     file://photo-viewer.service \
+    file://photo-viewer-splash.service \
     file://photo-viewer-wifi.service \
     file://photo-viewer-wpa.conf \
     file://20-photo-viewer-wlan.network \
@@ -36,7 +39,7 @@ S = "${WORKDIR}"
 
 inherit pkgconfig systemd
 
-SYSTEMD_SERVICE:${PN} = "photo-viewer.service photo-viewer-wifi.service"
+SYSTEMD_SERVICE:${PN} = "photo-viewer.service photo-viewer-splash.service photo-viewer-wifi.service"
 SYSTEMD_AUTO_ENABLE:${PN} = "enable"
 
 # This single-source Makefile has no generated configuration or clean target.
@@ -49,15 +52,19 @@ do_compile() {
 do_install() {
     install -d ${D}${bindir}
     install -m 0755 photo-viewer ${D}${bindir}/photo-viewer
+    install -m 0755 photo-viewer-splash ${D}${bindir}/photo-viewer-splash
 
     # Original photos live separately from application files.
     install -d ${D}/opt/photo-viewer/photos
     install -d ${D}${datadir}/photo-viewer
     install -m 0644 ${WORKDIR}/index.html ${D}${datadir}/photo-viewer/index.html
+    install -m 0644 ${WORKDIR}/boot-splash.bmp ${D}${datadir}/photo-viewer/boot-splash.bmp
 
     install -d ${D}${systemd_system_unitdir}
     install -m 0644 ${WORKDIR}/photo-viewer.service \
         ${D}${systemd_system_unitdir}/photo-viewer.service
+    install -m 0644 ${WORKDIR}/photo-viewer-splash.service \
+        ${D}${systemd_system_unitdir}/photo-viewer-splash.service
     install -m 0644 ${WORKDIR}/photo-viewer-wifi.service \
         ${D}${systemd_system_unitdir}/photo-viewer-wifi.service
     install -d ${D}${sysconfdir}/systemd/network
@@ -88,6 +95,7 @@ RDEPENDS:${PN}:append = " ${@'kernel-module-panel-waveshare-dsi kernel-module-go
 FILES:${PN} += " \
     /opt/photo-viewer/photos \
     ${datadir}/photo-viewer/index.html \
+    ${datadir}/photo-viewer/boot-splash.bmp \
     ${sysconfdir}/systemd/network/20-photo-viewer-wlan.network \
     ${sysconfdir}/photo-viewer-wpa.conf \
     ${sysconfdir}/modules-load.d/photo-viewer-panel.conf \

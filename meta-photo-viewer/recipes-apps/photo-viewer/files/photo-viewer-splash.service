@@ -1,0 +1,12 @@
+[Unit]
+Description=Show photo gallery splash when framebuffer becomes ready
+After=systemd-modules-load.service
+Before=photo-viewer.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/photo-viewer-splash
+TimeoutStartSec=35
+
+[Install]
+WantedBy=multi-user.target

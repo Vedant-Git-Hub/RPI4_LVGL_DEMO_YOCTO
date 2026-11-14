@@ -13,9 +13,19 @@
   li { padding: 9px 0; border-bottom: 1px solid #456; display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
   li span { flex: 1; min-width: 160px; overflow-wrap: anywhere }
   progress { width: min(300px, 100%) }
+  #camera-panel { margin: 16px 0; padding: 12px; border: 1px solid #456; border-radius: 8px }
+  #camera-view { display: block; width: 100%; max-height: 65vh; object-fit: contain; background: #000; aspect-ratio: 4 / 3 }
+  #camera-panel[hidden], progress[hidden] { display: none }
 </style>
 <h1>Photo Gallery</h1>
-<p>Upload original photos. The Pi decodes supported formats and fits them to its 800 × 480 screen.</p>
+<p>Upload original photos or capture from the USB camera connected to the Pi.</p>
+<button id="live-camera">Live camera</button>
+<section id="camera-panel" hidden>
+  <img id="camera-view" alt="Live USB camera preview">
+  <p id="camera-status" role="status">Connecting to camera...</p>
+  <button id="camera-capture" disabled>Capture</button>
+  <button id="camera-close">Back</button>
+</section>
 <section>
   <h2>Upload images</h2>
   <input id="original" type="file">
@@ -30,6 +40,71 @@ const original = document.querySelector('#original');
 const status = document.querySelector('#status');
 const progress = document.querySelector('#progress');
 const files = document.querySelector('#files');
+const cameraPanel = document.querySelector('#camera-panel');
+const cameraView = document.querySelector('#camera-view');
+const cameraStatus = document.querySelector('#camera-status');
+const cameraCapture = document.querySelector('#camera-capture');
+const liveCameraButton = document.querySelector('#live-camera');
+let cameraReady = false;
+
+liveCameraButton.onclick = () => {
+  liveCameraButton.hidden = true;
+  cameraPanel.hidden = false;
+  cameraReady = false;
+  cameraCapture.disabled = true;
+  cameraStatus.textContent = 'Connecting to camera...';
+  cameraView.src = '/api/camera/stream?time=' + Date.now();
+};
+document.querySelector('#camera-close').onclick = () => {
+  cameraView.removeAttribute('src');
+  cameraPanel.hidden = true;
+  liveCameraButton.hidden = false;
+  cameraReady = false;
+  cameraCapture.disabled = true;
+};
+cameraView.onload = () => {
+  if (cameraReady) return;
+  cameraReady = true;
+  cameraCapture.disabled = false;
+  cameraStatus.textContent = 'Live camera ready.';
+};
+cameraView.onerror = () => {
+  cameraReady = false;
+  cameraCapture.disabled = true;
+  cameraStatus.textContent = 'Could not start the camera. Check that the USB camera is connected and not open on the Pi.';
+};
+cameraCapture.onclick = async () => {
+  cameraCapture.disabled = true;
+  cameraStatus.textContent = 'Capturing...';
+  try {
+    const response = await fetch('/api/camera/capture', {method: 'POST'});
+    if (!response.ok) throw Error(await response.text());
+    const name = response.headers.get('X-Photo-Name');
+    if (!name) throw Error('Photo was saved on the Pi, but no download name was returned');
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    const manualDownload = document.createElement('a');
+    manualDownload.href = '/file?name=' + encodeURIComponent(name);
+    manualDownload.download = name;
+    manualDownload.textContent = 'Download again';
+    cameraStatus.replaceChildren(
+      document.createTextNode(`Saved ${name} to the Pi gallery and started its download on this device. `),
+      manualDownload
+    );
+    await refresh();
+  } catch (error) {
+    cameraStatus.textContent = 'Capture failed: ' + error.message;
+  } finally {
+    cameraCapture.disabled = cameraPanel.hidden || !cameraReady;
+  }
+};
 
 async function request(url, options) {
   const response = await fetch(url, options);

@@ -22,6 +22,7 @@ camera_device_t *camera_start(const char *path, const camera_mode_t *mode,
 void camera_stop(camera_device_t *camera);
 int camera_poll(camera_device_t *camera, uint8_t *preview, uint32_t width,
                 uint32_t height);
+int camera_wait(camera_device_t *camera, int timeout_ms);
 int camera_capture_jpeg(camera_device_t *camera, uint8_t **output,
                         size_t *output_size);
 

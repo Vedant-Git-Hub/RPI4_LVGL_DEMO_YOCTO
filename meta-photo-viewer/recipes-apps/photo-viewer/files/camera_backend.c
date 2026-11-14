@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <jpeglib.h>
 #include <linux/videodev2.h>
+#include <poll.h>
+#include <pthread.h>
 #include <setjmp.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +24,7 @@ typedef struct {
 
 struct camera_device {
     int fd;
+    int owns_lock;
     int streaming;
     camera_mode_t mode;
     uint32_t stride;
@@ -32,6 +35,9 @@ struct camera_device {
     size_t last_size;
     int last_valid;
 };
+
+/* The on-device screen and web preview must not reconfigure one UVC device at once. */
+static pthread_mutex_t camera_owner = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
     struct jpeg_error_mgr base;
@@ -181,8 +187,13 @@ camera_device_t *camera_start(const char *path, const camera_mode_t *mode,
                               char *error, size_t error_size)
 {
     if(!path || !mode) return NULL;
+    if(pthread_mutex_trylock(&camera_owner)) {
+        if(error && error_size) snprintf(error, error_size, "Camera is in use");
+        return NULL;
+    }
     camera_device_t *camera = calloc(1, sizeof(*camera));
-    if(!camera) return NULL;
+    if(!camera) { pthread_mutex_unlock(&camera_owner); return NULL; }
+    camera->owns_lock = 1;
     camera->fd = -1;
     camera->fd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
     if(camera->fd < 0) { error_text(error, error_size, "Open camera"); goto fail; }
@@ -251,6 +262,7 @@ void camera_stop(camera_device_t *camera)
             munmap(camera->buffers[i].address, camera->buffers[i].length);
     if(camera->fd >= 0) close(camera->fd);
     free(camera->last_frame);
+    if(camera->owns_lock) pthread_mutex_unlock(&camera_owner);
     free(camera);
 }
 
@@ -368,7 +380,7 @@ static int preview_jpeg(camera_device_t *camera, uint8_t *preview,
 int camera_poll(camera_device_t *camera, uint8_t *preview, uint32_t width,
                 uint32_t height)
 {
-    if(!camera || !preview || !width || !height) return -1;
+    if(!camera || (preview && (!width || !height))) return -1;
     int received = 0;
     for(unsigned int i = 0; i < camera->buffer_count; i++) {
         struct v4l2_buffer buffer = {.type = V4L2_BUF_TYPE_VIDEO_CAPTURE,
@@ -394,11 +406,28 @@ int camera_poll(camera_device_t *camera, uint8_t *preview, uint32_t width,
         if(camera_ioctl(camera->fd, VIDIOC_QBUF, &buffer)) return -1;
     }
     if(!received) return 0;
-    int valid = camera->mode.format == V4L2_PIX_FMT_YUYV ?
-                preview_yuyv(camera, preview, width, height) :
-                preview_jpeg(camera, preview, width, height);
+    /* The browser can forward an MJPEG camera frame without decoding it. */
+    int valid = !preview ?
+                (camera->mode.format == V4L2_PIX_FMT_YUYV ?
+                 camera->last_size >= (size_t)camera->stride * camera->mode.height :
+                 camera->last_size >= 4 && camera->last_frame[0] == 0xff &&
+                 camera->last_frame[1] == 0xd8) :
+                (camera->mode.format == V4L2_PIX_FMT_YUYV ?
+                 preview_yuyv(camera, preview, width, height) :
+                 preview_jpeg(camera, preview, width, height));
     camera->last_valid = valid;
     return valid ? 1 : 0;
+}
+
+int camera_wait(camera_device_t *camera, int timeout_ms)
+{
+    if(!camera) return -1;
+    struct pollfd ready = {.fd = camera->fd, .events = POLLIN};
+    int result;
+    do result = poll(&ready, 1, timeout_ms);
+    while(result < 0 && errno == EINTR);
+    return result < 0 || (ready.revents & (POLLERR | POLLHUP | POLLNVAL)) ? -1 :
+           (ready.revents & POLLIN) ? 1 : 0;
 }
 
 int camera_capture_jpeg(camera_device_t *camera, uint8_t **output,

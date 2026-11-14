@@ -1,4 +1,5 @@
 #include "media_server.h"
+#include "camera_backend.h"
 #include "image_convert.h"
 #include "image_settings.h"
 
@@ -8,6 +9,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <linux/videodev2.h>
 #include <pthread.h>
 #include <poll.h>
 #include <stdatomic.h>
@@ -18,6 +20,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 
 #define MAX_UPLOAD (64 * 1024 * 1024)
@@ -27,6 +30,16 @@
 static char photo_directory[384];
 static atomic_int media_changed;
 static pthread_t server_thread;
+static pthread_mutex_t camera_lock = PTHREAD_MUTEX_INITIALIZER;
+static uint8_t *camera_frame;
+static size_t camera_frame_size;
+static int camera_streaming;
+static atomic_int active_clients;
+
+#define CAMERA_CONFIG "/opt/photo-viewer/camera.conf"
+#define MAX_CLIENTS 16
+
+static int file_path(const char *name, char *path, size_t capacity);
 
 
 static int send_all(int fd, const void *data, size_t size)
@@ -56,6 +69,150 @@ static void reply(int fd, int code, const char *reason, const char *type,
 static void error_reply(int fd, int code, const char *reason, const char *message)
 {
     reply(fd, code, reason, "text/plain; charset=utf-8", message, strlen(message));
+}
+
+static camera_mode_t web_camera_mode(const camera_mode_t *modes, int count)
+{
+    unsigned int width = 0, height = 0, format = 0;
+    FILE *config = fopen(CAMERA_CONFIG, "r");
+    int saved = 0;
+    if(config) {
+        saved = fscanf(config, "%u %u %u", &width, &height, &format) >= 2;
+        fclose(config);
+    }
+    int choice = 0;
+    for(int i = 0; i < count; i++) {
+        if(saved && modes[i].width == width && modes[i].height == height &&
+           (!format || modes[i].format == format)) { choice = i; break; }
+        if(!saved && modes[i].width == 640 && modes[i].height == 480) {
+            choice = i; break;
+        }
+    }
+    /* MJPEG at the selected resolution is forwarded without reencoding. */
+    if(modes[choice].format == V4L2_PIX_FMT_YUYV)
+        for(int i = 0; i < count; i++)
+            if(modes[i].width == modes[choice].width &&
+               modes[i].height == modes[choice].height &&
+               modes[i].format == V4L2_PIX_FMT_MJPEG) return modes[i];
+    return modes[choice];
+}
+
+static void stream_camera(int fd)
+{
+    pthread_mutex_lock(&camera_lock);
+    if(camera_streaming) {
+        pthread_mutex_unlock(&camera_lock);
+        error_reply(fd, 409, "Conflict", "Camera preview is already open in another browser");
+        return;
+    }
+    camera_streaming = 1;
+    pthread_mutex_unlock(&camera_lock);
+
+    camera_mode_t modes[CAMERA_MAX_MODES];
+    char path[64], name[64], error[128] = {0};
+    int count = camera_discover(path, sizeof(path), name, sizeof(name),
+                                modes, CAMERA_MAX_MODES);
+    camera_mode_t mode = count > 0 ? web_camera_mode(modes, count) : (camera_mode_t){0};
+    camera_device_t *camera = count > 0 ?
+        camera_start(path, &mode, error, sizeof(error)) : NULL;
+    if(!camera) {
+        error_reply(fd, 503, "Service Unavailable", count ?
+                    (error[0] ? error : "Could not start camera") :
+                    "No supported USB camera found");
+        goto done;
+    }
+    struct timeval timeout = {.tv_sec = 2};
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    const char header[] = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\n"
+                          "Cache-Control: no-store\r\nConnection: close\r\n\r\n";
+    if(!send_all(fd, header, sizeof(header) - 1)) goto done;
+    for(;;) {
+        char probe;
+        ssize_t connection = recv(fd, &probe, 1, MSG_PEEK | MSG_DONTWAIT);
+        if(connection == 0 || (connection < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) break;
+        int ready = camera_wait(camera, 1000);
+        if(ready < 0) break;
+        if(!ready || camera_poll(camera, NULL, 0, 0) != 1) continue;
+        uint8_t *frame = NULL;
+        size_t size = 0;
+        if(!camera_capture_jpeg(camera, &frame, &size)) continue;
+        pthread_mutex_lock(&camera_lock);
+        free(camera_frame);
+        camera_frame = frame;
+        camera_frame_size = size;
+        pthread_mutex_unlock(&camera_lock);
+        char part[128];
+        int length = snprintf(part, sizeof(part),
+                              "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %zu\r\n\r\n", size);
+        if(length <= 0 || (size_t)length >= sizeof(part) ||
+           !send_all(fd, part, (size_t)length) || !send_all(fd, frame, size) ||
+           !send_all(fd, "\r\n", 2)) break;
+    }
+done:
+    camera_stop(camera);
+    pthread_mutex_lock(&camera_lock);
+    free(camera_frame);
+    camera_frame = NULL;
+    camera_frame_size = 0;
+    camera_streaming = 0;
+    pthread_mutex_unlock(&camera_lock);
+}
+
+static void capture_camera(int fd)
+{
+    pthread_mutex_lock(&camera_lock);
+    size_t size = camera_frame_size;
+    uint8_t *frame = size ? malloc(size) : NULL;
+    if(frame) memcpy(frame, camera_frame, size);
+    int streaming = camera_streaming;
+    pthread_mutex_unlock(&camera_lock);
+    if(!frame) {
+        error_reply(fd, streaming ? 503 : 409, streaming ? "Service Unavailable" : "Conflict",
+                    streaming ? "Waiting for a camera frame" : "Open Live camera first");
+        return;
+    }
+    time_t now = time(NULL);
+    struct tm local;
+    char stamp[32];
+    if(localtime_r(&now, &local)) strftime(stamp, sizeof(stamp), "%Y%m%d_%H%M%S", &local);
+    else snprintf(stamp, sizeof(stamp), "%ld", (long)now);
+    char name[80], path[512];
+    int output = -1;
+    for(unsigned int attempt = 0; attempt < 1000; attempt++) {
+        snprintf(name, sizeof(name), "Photo_%s_%03u.jpg", stamp, attempt);
+        if(!file_path(name, path, sizeof(path))) break;
+        output = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+        if(output >= 0 || errno != EEXIST) break;
+    }
+    if(output < 0) {
+        free(frame);
+        error_reply(fd, 500, "Internal Server Error", "Could not create photo in gallery");
+        return;
+    }
+    size_t written = 0;
+    while(written < size) {
+        ssize_t count = write(output, frame + written, size - written);
+        if(count <= 0) break;
+        written += (size_t)count;
+    }
+    int okay = written == size && fsync(output) == 0;
+    if(close(output)) okay = 0;
+    if(!okay) {
+        unlink(path);
+        free(frame);
+        error_reply(fd, 500, "Internal Server Error", "Could not save photo in gallery");
+        return;
+    }
+    atomic_store(&media_changed, 1);
+    char header[384];
+    int length = snprintf(header, sizeof(header),
+                          "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: %zu\r\n"
+                          "Content-Disposition: attachment; filename=\"%s\"\r\n"
+                          "X-Photo-Name: %s\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+                          size, name, name);
+    if(length > 0 && (size_t)length < sizeof(header) && send_all(fd, header, (size_t)length))
+        send_all(fd, frame, size);
+    free(frame);
 }
 
 static void serve_page(int fd)
@@ -308,6 +465,10 @@ static void serve_client(int fd)
         serve_page(fd); return;
     }
     if(!strcmp(method, "GET") && !strcmp(target, "/api/files")) { list_files(fd); return; }
+    if(!strcmp(method, "GET") &&
+       (!strcmp(target, "/api/camera/stream") ||
+        !strncmp(target, "/api/camera/stream?", 19))) { stream_camera(fd); return; }
+    if(!strcmp(method, "POST") && !strcmp(target, "/api/camera/capture")) { capture_camera(fd); return; }
     if(!strcmp(method, "POST") && !strncmp(target, "/copy?", 6)) {
         move_or_copy(fd, target, 1); return;
     }
@@ -374,6 +535,18 @@ static int listen_port(unsigned int port)
     return listener;
 }
 
+static void *client_main(void *argument)
+{
+    int fd = (int)(intptr_t)argument;
+    struct timeval timeout = {.tv_sec = 10};
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    serve_client(fd);
+    close(fd);
+    atomic_fetch_sub(&active_clients, 1);
+    return NULL;
+}
+
 static void *server_main(void *unused)
 {
     (void)unused;
@@ -392,11 +565,17 @@ static void *server_main(void *unused)
             if(!(listeners[i].revents & POLLIN)) continue;
             int fd = accept(listeners[i].fd, NULL, NULL);
             if(fd < 0) continue;
-            struct timeval timeout = {.tv_sec = 10};
-            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-            serve_client(fd);
-            close(fd);
+            if(atomic_fetch_add(&active_clients, 1) >= MAX_CLIENTS) {
+                atomic_fetch_sub(&active_clients, 1);
+                error_reply(fd, 503, "Service Unavailable", "Too many connections");
+                close(fd);
+                continue;
+            }
+            pthread_t client;
+            if(pthread_create(&client, NULL, client_main, (void *)(intptr_t)fd)) {
+                atomic_fetch_sub(&active_clients, 1);
+                close(fd);
+            } else pthread_detach(client);
         }
     }
 }

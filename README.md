@@ -120,7 +120,10 @@ outside it.
 Use **Show** beside the password field to verify what was typed. The password
 stays in the field until the Pi connects, so a failed attempt can be corrected.
 The status line shows scanning, association, authentication, or a temporarily
-rejected network when those states are reported by `wpa_supplicant`.
+rejected network when those states are reported by `wpa_supplicant`. When the
+router rejects a connection, the viewer shows the reason from the Wi-Fi
+service log if available. Retrying an SSID replaces older saved attempts for
+that same SSID.
 The status line shows the Pi's address after DHCP completes. Ethernet can
 also reach the web manager.
 

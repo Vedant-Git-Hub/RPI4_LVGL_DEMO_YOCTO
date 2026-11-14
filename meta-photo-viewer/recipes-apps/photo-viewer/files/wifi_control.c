@@ -9,7 +9,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-static int command(char *output, size_t capacity, const char *const *args)
+static int selected_network_id = -1;
+
+static int command(const char *program, char *output, size_t capacity,
+                   const char *const *args)
 {
     int pipes[2];
     if(pipe(pipes)) return 0;
@@ -19,7 +22,7 @@ static int command(char *output, size_t capacity, const char *const *args)
         dup2(pipes[1], STDOUT_FILENO);
         dup2(pipes[1], STDERR_FILENO);
         close(pipes[1]);
-        execv("/usr/sbin/wpa_cli", (char *const *)args);
+        execv(program, (char *const *)args);
         _exit(127);
     }
     close(pipes[1]);
@@ -46,7 +49,65 @@ static int cli(char *output, size_t capacity, const char *a, const char *b,
                const char *c, const char *d)
 {
     const char *args[] = {"wpa_cli", "-i", "wlan0", a, b, c, d, NULL};
-    return command(output, capacity, args);
+    return command("/usr/sbin/wpa_cli", output, capacity, args);
+}
+
+static int previous_network_ids(const char *ssid, int *ids, int capacity)
+{
+    char output[4096];
+    if(!cli(output, sizeof(output), "list_networks", NULL, NULL, NULL)) return 0;
+    int total = 0;
+    char *save = NULL;
+    for(char *line = strtok_r(output, "\n", &save); line;
+        line = strtok_r(NULL, "\n", &save)) {
+        char *name = strchr(line, '\t');
+        if(!name || line[0] < '0' || line[0] > '9') continue;
+        *name++ = '\0';
+        char *end = strchr(name, '\t');
+        if(!end) continue;
+        *end = '\0';
+        if(!strcmp(name, ssid) && total < capacity) ids[total++] = atoi(line);
+    }
+    return total;
+}
+
+static int network_temporarily_disabled(const char *output, int id)
+{
+    char copy[4096];
+    snprintf(copy, sizeof(copy), "%s", output);
+    char *save = NULL;
+    for(char *line = strtok_r(copy, "\n", &save); line;
+        line = strtok_r(NULL, "\n", &save)) {
+        char *tab = strchr(line, '\t');
+        if(!tab || line[0] < '0' || line[0] > '9') continue;
+        *tab = '\0';
+        if((id >= 0 && atoi(line) == id) ||
+           (id < 0 && strstr(tab + 1, "[CURRENT]")))
+            return strstr(tab + 1, "[TEMP-DISABLED]") != NULL;
+    }
+    return 0;
+}
+
+static void recent_failure_reason(int id, char *reason, size_t capacity)
+{
+    reason[0] = '\0';
+    char output[8192];
+    const char *args[] = {"journalctl", "-u", "photo-viewer-wifi.service", "-b",
+                          "-n", "30", "--no-pager", "-o", "cat", NULL};
+    if(!command("/usr/bin/journalctl", output, sizeof(output), args)) return;
+    char *last = NULL;
+    for(char *event = strstr(output, "CTRL-EVENT-SSID-TEMP-DISABLED "); event;
+        event = strstr(event + 1, "CTRL-EVENT-SSID-TEMP-DISABLED ")) {
+        char current_id[24];
+        snprintf(current_id, sizeof(current_id), "id=%d ", id);
+        char *line_end = strchr(event, '\n');
+        char *field = strstr(event, "reason=");
+        if((id < 0 || strstr(event, current_id) == event +
+            strlen("CTRL-EVENT-SSID-TEMP-DISABLED ")) &&
+           field && (!line_end || field < line_end)) last = field;
+    }
+    if(last) (void)sscanf(last, "reason=%31[A-Z_]", reason);
+    if(capacity) reason[capacity - 1] = '\0';
 }
 
 static int cli_ok(const char *a, const char *b, const char *c, const char *d)
@@ -104,6 +165,8 @@ int wifi_connect(const char *ssid, const char *password)
     if(!ssid || !*ssid || strlen(ssid) > 32 || !password || strlen(password) > 63 ||
        (password[0] && strlen(password) < 8)) return 0;
     char network[80], secret[136], output[256];
+    int previous_ids[16];
+    int previous_count = previous_network_ids(ssid, previous_ids, 16);
     if(!quoted(ssid, network, sizeof(network))) return 0;
     if(password[0] && !quoted(password, secret, sizeof(secret))) return 0;
     if(!cli(output, sizeof(output), "add_network", NULL, NULL, NULL)) return 0;
@@ -114,9 +177,17 @@ int wifi_connect(const char *ssid, const char *password)
     if(password[0]) {
         if(!cli_ok("set_network", id, "psk", secret)) return 0;
     } else if(!cli_ok("set_network", id, "key_mgmt", "NONE")) return 0;
-    return cli_ok("enable_network", id, NULL, NULL) &&
-           cli_ok("select_network", id, NULL, NULL) &&
-           cli_ok("save_config", NULL, NULL, NULL);
+    if(!cli_ok("enable_network", id, NULL, NULL) ||
+       !cli_ok("select_network", id, NULL, NULL)) return 0;
+    selected_network_id = atoi(id);
+    /* Replace older attempts for this SSID so a stale password cannot be
+     * selected after a reboot. Other saved networks are preserved. */
+    for(int i = 0; i < previous_count; i++) {
+        char old_id[16];
+        snprintf(old_id, sizeof(old_id), "%d", previous_ids[i]);
+        (void)cli_ok("remove_network", old_id, NULL, NULL);
+    }
+    return cli_ok("save_config", NULL, NULL, NULL);
 }
 
 void wifi_status(char *message, size_t capacity)
@@ -132,8 +203,16 @@ void wifi_status(char *message, size_t capacity)
     if(strcmp(state, "COMPLETED")) {
         char networks[4096];
         if(cli(networks, sizeof(networks), "list_networks", NULL, NULL, NULL) &&
-           strstr(networks, "[TEMP-DISABLED]"))
-            snprintf(message, capacity, "Wi-Fi rejected; check password or router security");
+           network_temporarily_disabled(networks, selected_network_id)) {
+            char reason[32];
+            recent_failure_reason(selected_network_id, reason, sizeof(reason));
+            if(!strcmp(reason, "WRONG_KEY"))
+                snprintf(message, capacity, "Router reports wrong key; check Wi-Fi password");
+            else if(reason[0])
+                snprintf(message, capacity, "Wi-Fi rejected (%s); check router settings", reason);
+            else
+                snprintf(message, capacity, "Wi-Fi temporarily rejected; check router settings");
+        }
         else if(!strcmp(state, "4WAY_HANDSHAKE") ||
            !strcmp(state, "GROUP_HANDSHAKE"))
             snprintf(message, capacity, "Wi-Fi authenticating with router...");

@@ -5,6 +5,9 @@ The main branch supports the 800 × 480 Waveshare 4.3-inch DSI LCD, the
 1024 × 600 Waveshare 7-inch DSI LCD (C), and HDMI monitors. It uses LVGL on `/dev/fb0`
 and Linux services for storage, Wi-Fi, DHCP, mDNS, and image decoding.
 
+See [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md) for an illustrated map of
+the source tree, build outputs, and files used by the running Pi.
+
 The stable 2.0 source release is tagged `stable-v2.0`; 1.0 remains available as
 `stable-v1.0`. See
 [CHANGELOG.md](CHANGELOG.md) for its scope and validation. Build images are

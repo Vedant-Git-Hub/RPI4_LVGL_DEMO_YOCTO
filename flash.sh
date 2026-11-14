@@ -33,6 +33,8 @@ case "$display:$media" in
     4_3_display:sd) image_base=photo-viewer-image-sd ;;
     hdmi_display:usb) image_base=photo-viewer-image-hdmi ;;
     hdmi_display:sd) image_base=photo-viewer-image-hdmi-sd ;;
+    7_display:usb) image_base=photo-viewer-image-7inch ;;
+    7_display:sd) image_base=photo-viewer-image-7inch-sd ;;
     *) printf 'The latest build record has an unsupported display or boot medium.\n' >&2; exit 1 ;;
 esac
 if [[ ! $checksum =~ ^[0-9a-f]{64}$ || $image_file != "$image_base-raspberrypi4-64.rootfs-"*.wic.bz2 || $image_file == */* ]]; then

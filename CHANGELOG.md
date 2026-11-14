@@ -1,6 +1,6 @@
 # Release history
 
-## Unreleased
+## Stable version 2.0 — 2026-11-14
 
 - Add separate `./build` and `flash.sh` commands. The build script records the
   latest successful image; flashing verifies its checksum and writes it
@@ -9,6 +9,14 @@
   HDMI scales the LVGL interface to the detected mode and accepts a USB mouse.
 - Use the SD root partition for photos when booting from SD, leaving the
   firmware boot partition untouched by the gallery.
+- Add the Waveshare 7-inch DSI LCD (C) profile at 1024 × 600 with Goodix touch
+  mapped to the framebuffer, including its required Pi 4 I2C1 wiring.
+- Fix camera JPEG opening on the 7-inch profile and improve Wi-Fi connection
+  feedback and saved-profile handling.
+
+The project owner confirmed the 7-inch display, touch, camera, gallery image
+opening, and Wi-Fi work on the Raspberry Pi 4. The 7-inch USB and SD images,
+4.3-inch image, and HDMI USB and SD images passed local Yocto builds.
 
 ## Stable version 1.0 — 2026-11-13
 

@@ -1,13 +1,42 @@
 # Raspberry Pi 4 photo viewer
 
 This Yocto project ports the ESP32 Raven gallery workflow to a Raspberry Pi 4.
-The main branch supports the 800 × 480 Waveshare 4.3-inch DSI LCD and HDMI
-monitors. It uses LVGL on `/dev/fb0`
+The main branch supports the 800 × 480 Waveshare 4.3-inch DSI LCD, the
+1024 × 600 Waveshare 7-inch DSI LCD (C), and HDMI monitors. It uses LVGL on `/dev/fb0`
 and Linux services for storage, Wi-Fi, DHCP, mDNS, and image decoding.
 
-The stable 1.0 source release is tagged `stable-v1.0`. See
+The stable 2.0 source release is tagged `stable-v2.0`; 1.0 remains available as
+`stable-v1.0`. See
 [CHANGELOG.md](CHANGELOG.md) for its scope and validation. Build images are
 generated locally and are not stored in Git.
+
+### 7-inch DSI LCD (C) profile
+
+The `7_display` profile supports the Waveshare **7inch DSI LCD (C)**,
+1024 × 600 capacitive touch panel. It uses the Raspberry Pi kernel's
+`vc4-kms-dsi-waveshare-panel,7_0_inchC`
+overlay, its Waveshare panel driver, and the Goodix touch driver. The kernel
+overlay exposes an 800 × 480 touch range; the application reads the Linux
+input device's axis limits and maps them across the 1024 × 600 framebuffer.
+The gallery, full-screen image rendering, editor preview, and camera preview
+use the panel's native resolution.
+Waveshare specifies the `i2c1` overlay option for this model. On a Pi 4,
+connect both the 15-pin DSI ribbon and the four-wire cable carrying 5 V,
+ground, SDA1, and SCL1. Without the four-wire connection, the display's
+controller may not probe and `/dev/fb0` may never appear.
+
+Build the 7-inch USB or SD image:
+
+```bash
+./build 7_display
+./build 7_display sd
+```
+
+Then use `./flash.sh sdc` for the latest successful image (or replace `sdc`
+with the actual drive). Flashing does not build. The script asks for
+confirmation before erasing the selected drive. The project owner has
+confirmed display, touch, camera capture, gallery opening, and Wi-Fi on this
+panel.
 
 ## Gallery
 
@@ -41,6 +70,7 @@ library. Back closes the camera.
 **Settings → Camera Settings** lists resolutions reported by the camera.
 Choose one and tap **Apply**; the choice is saved across boots in
 `/opt/photo-viewer/camera.conf`.
+Captured JPEGs open in the gallery at the selected display resolution.
 The viewer supports USB cameras that expose MJPEG or YUYV through Video4Linux2.
 Where a camera offers both formats at one resolution, Settings lists both so
 you can choose the one that works best with your camera. Modes up to
@@ -86,6 +116,13 @@ and connect. The connection
 profile is saved in `/etc/photo-viewer-wpa.conf` and reconnects after reboot.
 The keyboard opens when a text field is tapped and closes when you tap
 outside it.
+Use **Show** beside the password field to verify what was typed. The password
+stays in the field until the Pi connects, so a failed attempt can be corrected.
+The status line shows scanning, association, authentication, or a temporarily
+rejected network when those states are reported by `wpa_supplicant`. When the
+router rejects a connection, the viewer shows the reason from the Wi-Fi
+service log if available. Retrying an SSID replaces older saved attempts for
+that same SSID.
 The status line shows the Pi's address after DHCP completes. Ethernet can
 also reach the web manager.
 
@@ -121,6 +158,8 @@ Build for the selected display and boot medium. USB boot is the default:
 ```bash
 ./build 4_3_display
 ./build 4_3_display sd
+./build 7_display
+./build 7_display sd
 ./build hdmi_display
 ./build hdmi_display sd
 ```

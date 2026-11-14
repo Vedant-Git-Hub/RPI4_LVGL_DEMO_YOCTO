@@ -1,0 +1,10 @@
+# Experimental 1024x600 panel with SD boot.
+header:
+  version: 14
+  includes:
+    - kas/rpi4-photo-viewer-7inch.yml
+
+local_conf_header:
+  photo-viewer-7inch-sd: |
+    PHOTO_VIEWER_BOOT_MEDIA = "sd"
+    IMAGE_BASENAME:pn-photo-viewer-image = "photo-viewer-image-7inch-sd"

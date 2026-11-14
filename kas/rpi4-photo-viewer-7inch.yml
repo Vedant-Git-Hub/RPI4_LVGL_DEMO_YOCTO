@@ -1,0 +1,11 @@
+# Experimental Waveshare 7inch DSI LCD (C), 1024x600, USB boot.
+header:
+  version: 14
+  includes:
+    - kas/rpi4-photo-viewer.yml
+
+local_conf_header:
+  photo-viewer-7inch: |
+    PHOTO_VIEWER_7INCH = "1"
+    PHOTO_VIEWER_DISPLAY = "7_display"
+    IMAGE_BASENAME:pn-photo-viewer-image = "photo-viewer-image-7inch"

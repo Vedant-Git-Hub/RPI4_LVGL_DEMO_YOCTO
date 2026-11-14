@@ -6,8 +6,8 @@ build_dir="$project_dir/.kas-work/build"
 deploy_dir="$build_dir/tmp/deploy/images/raspberrypi4-64"
 
 usage() {
-    printf 'Usage: %s {4_3_display|hdmi_display} [usb|sd]\n' "${0##*/}" >&2
-    printf 'Examples: %s 4_3_display, %s hdmi_display sd\n' "${0##*/}" "${0##*/}" >&2
+    printf 'Usage: %s {4_3_display|7_display|hdmi_display} [usb|sd]\n' "${0##*/}" >&2
+    printf 'Examples: %s 7_display, %s hdmi_display sd\n' "${0##*/}" "${0##*/}" >&2
 }
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then usage; exit 2; fi
@@ -20,6 +20,8 @@ case "$display:$media" in
     4_3_display:sd) profile=kas/rpi4-photo-viewer-sd.yml; image_base=photo-viewer-image-sd; overlay=vc4-kms-dsi-waveshare-800x480; root=/dev/mmcblk0p2 ;;
     hdmi_display:usb) profile=kas/rpi4-photo-viewer-hdmi.yml; image_base=photo-viewer-image-hdmi; overlay=; root=/dev/sda2 ;;
     hdmi_display:sd) profile=kas/rpi4-photo-viewer-hdmi-sd.yml; image_base=photo-viewer-image-hdmi-sd; overlay=; root=/dev/mmcblk0p2 ;;
+    7_display:usb) profile=kas/rpi4-photo-viewer-7inch.yml; image_base=photo-viewer-image-7inch; overlay=vc4-kms-dsi-waveshare-panel; root=/dev/sda2 ;;
+    7_display:sd) profile=kas/rpi4-photo-viewer-7inch-sd.yml; image_base=photo-viewer-image-7inch-sd; overlay=vc4-kms-dsi-waveshare-panel; root=/dev/mmcblk0p2 ;;
     *) usage; exit 2 ;;
 esac
 
@@ -65,7 +67,9 @@ if [[ " $cmdline_text " != *" root=$root "* ]]; then
     exit 1
 fi
 if [[ -n $overlay ]]; then
-    if [[ $config_text != *"dtoverlay=$overlay"* || ! -r $deploy_dir/$overlay.dtbo ]]; then
+    overlay_line="dtoverlay=$overlay"
+    if [[ $display == 7_display ]]; then overlay_line+=",7_0_inchC,i2c1"; fi
+    if [[ $config_text != *"$overlay_line"* || ! -r $deploy_dir/$overlay.dtbo ]]; then
         printf 'Boot configuration does not contain the selected display overlay.\n' >&2
         exit 1
     fi

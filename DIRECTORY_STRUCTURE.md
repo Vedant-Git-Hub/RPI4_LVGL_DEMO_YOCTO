@@ -40,7 +40,7 @@ photo_viewer/
 ├── meta-photo-viewer/            Custom Yocto layer
 │   ├── conf/layer.conf           Register this layer with BitBake
 │   ├── recipes-apps/photo-viewer/
-│   │   ├── photo-viewer_2.0.bb   Build/install the gallery application
+│   │   ├── photo-viewer_2.1.bb   Build/install the gallery application
 │   │   └── files/               C sources, web page, service files
 │   ├── recipes-core/images/
 │   │   └── photo-viewer-image.bb Define packages in the Pi root filesystem
@@ -82,7 +82,7 @@ meta-photo-viewer/recipes-apps/photo-viewer/files/
 ├── camera_ui.c/.h                 Camera screen and capture controls
 ├── image_convert.c/.h            Decode and prepare images for display
 ├── image_settings.c/.h           Saved per-image rotation and Fit/Fill
-├── media_server.c/.h             HTTP photo manager
+├── media_server.c/.h             HTTP photo manager and live camera API
 ├── index.html                    Browser interface
 ├── boot_splash.c                 Paint the startup artwork to /dev/fb0
 ├── boot-splash.bmp               Bold yellow welcome message
@@ -114,7 +114,7 @@ and should not be confused with the source files above.
 | `/srv/photo-viewer-netboot/tftp/` on the host | Pi firmware, kernel, command line, and display overlays served by TFTP. |
 | `/srv/photo-viewer-netboot/rootfs/` on the host | Pi root filesystem exported over NFS. |
 | `/opt/photo-viewer/photos/` on the Pi | Gallery photos; network boot stores them in the host NFS root. |
-| `/opt/photo-viewer/camera.conf` on the Pi | Saved camera mode. |
+| `/opt/photo-viewer/camera.conf` on the Pi | Camera mode shared by the Pi screen and web controls. |
 | `/etc/photo-viewer-wpa.conf` on the Pi | Saved Wi-Fi profiles. |
 
 The `netboot/setup-host.sh` script installs the host service configuration
@@ -122,6 +122,22 @@ under `/etc/photo-viewer-netboot/`, `/etc/exports.d/`, and systemd. The
 `netboot/deploy.sh` script replaces the host TFTP and NFS directories while
 preserving gallery photos and saved device settings. Keep the host running
 while the Pi uses network boot.
+
+## Boot display handoff
+
+```mermaid
+flowchart LR
+    A["Pi 4 EEPROM bootloader"] --> B["Raspberry Pi firmware"]
+    B --> C["Linux DSI driver creates /dev/fb0"]
+    C --> D["photo-viewer-splash.service draws boot-splash.bmp"]
+    D --> E["LVGL keeps the same artwork visible"]
+    E --> F["Gallery ready"]
+```
+
+The 7-inch DSI screen is blank before Linux initializes its panel driver.
+This image boots the kernel directly through Raspberry Pi firmware; U-Boot is
+not in the boot chain. The splash service runs when the framebuffer appears,
+then the LVGL app keeps the same message visible until its screens are built.
 
 The repository ignores `.kas-work/`, downloaded layers, build artifacts, and
 the downloaded `kas-container` wrapper. A fresh checkout regenerates them on

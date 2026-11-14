@@ -8,9 +8,9 @@ and Linux services for storage, Wi-Fi, DHCP, mDNS, and image decoding.
 See [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md) for an illustrated map of
 the source tree, build outputs, and files used by the running Pi.
 
-The stable 2.0 source release is tagged `stable-v2.0`; 1.0 remains available as
-`stable-v1.0`. See
-[CHANGELOG.md](CHANGELOG.md) for its scope and validation. Build images are
+The current source release is tagged `stable-v2.1`; earlier releases remain
+available as `stable-v2.0` and `stable-v1.0`. See
+[CHANGELOG.md](CHANGELOG.md) for their scope and validation. Build images are
 generated locally and are not stored in Git.
 
 ### 7-inch DSI LCD (C) profile
@@ -35,8 +35,9 @@ Build the 7-inch USB or SD image:
 ./build 7_display sd
 ```
 
-Then use `./flash.sh sdc` for the latest successful image (or replace `sdc`
-with the actual drive). Flashing does not build. The script asks for
+Then use `./flash.sh sdc sd` for the SD build or `./flash.sh sdc usb` for the
+USB build (replace `sdc` with the actual whole-device name). Flashing does not
+build. The script asks for
 confirmation before erasing the selected drive. The project owner has
 confirmed display, touch, camera capture, gallery opening, and Wi-Fi on this
 panel.
@@ -48,15 +49,16 @@ The startup screen shows **Welcome to Vedant's Photo Gallary!** and
 `photo-viewer-splash` service paints it directly to `/dev/fb0` as soon as the
 Linux display driver exposes the framebuffer. LVGL shows the same artwork
 while building the gallery, then removes it when the main screen is ready.
-The 7-inch DSI panel is initialized by the Linux driver, so it stays blank
-during the earlier Pi bootloader phase. Raspberry Pi's current early custom
-splash support does not initialize MIPI DSI displays in firmware.
+The Pi 4 boots through its onboard EEPROM bootloader, Raspberry Pi firmware,
+and then Linux; this image does not use U-Boot. The 7-inch DSI panel is
+initialized by the Linux driver, so it stays blank during the earlier firmware
+stages. Raspberry Pi's [current early custom splash support](https://www.raspberrypi.com/news/configure-early-boot-splash-screens-for-spi-and-i2c-based-displays/)
+does not initialize MIPI DSI displays in firmware.
 
+## Wired network boot
 
-## Experimental wired network boot
-
-The `experimental/rpi4-netboot` branch adds a Pi 4 Ethernet boot profile for
-all three displays. Connect the Pi's Ethernet port directly to this Ubuntu
+The main branch includes a Pi 4 Ethernet boot profile for
+all three displays. Connect the Pi's Ethernet port directly to this development
 host's `eno1` port. The host uses `10.42.0.1`; the Pi receives `10.42.0.100`.
 The host's Wi-Fi connection and default route remain separate. The host must
 stay powered on while the Pi uses its NFS root filesystem.

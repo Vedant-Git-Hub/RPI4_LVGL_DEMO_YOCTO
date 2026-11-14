@@ -1,9 +1,10 @@
 # Release history
 
-## Experimental network boot branch — 2026-11-14
+## Stable version 2.1 — 2026-11-15
 
-- Add dedicated direct-Ethernet DHCP/TFTP and NFS services on the development
-  host, with a stable host address and a single Pi lease.
+- Merge network boot into the main branch. Add dedicated direct-Ethernet
+  DHCP/TFTP and NFS services on the development host, with a stable host
+  address and a single Pi lease.
 - Add network build profiles for the 4.3-inch DSI, 7-inch DSI, and HDMI displays.
   `./build DISPLAY net` packages the root filesystem and matching boot files
   together; `./flash.sh net` deploys the verified bundle without rebuilding.
@@ -12,10 +13,24 @@
 - Fix Pi 4 network boot discovery with the Raspberry Pi PXE service response;
   include `overlay_map.dtb` and `vc4-kms-v3d-pi4.dtbo` so the Pi creates the
   DSI framebuffer. Add a boot diagnostic collector for host-side debugging.
+- Add a browser **Live camera** view using MJPEG streaming when the selected
+  camera mode provides it. **Capture** saves the same JPEG to the Pi gallery
+  and starts a download on the browser device.
+- Add browser camera resolution and format controls. The web page and Pi
+  touchscreen use the same saved setting across reboots.
+- Add a bold yellow welcome splash from the first Linux framebuffer image
+  until the LVGL gallery is ready. The Waveshare DSI panel remains blank
+  during the Pi 4 EEPROM bootloader and firmware stages because its driver
+  initializes under Linux. U-Boot is not used by this image.
+- Add the illustrated [directory guide](DIRECTORY_STRUCTURE.md) and update
+  the startup, camera, and network boot documentation.
 
 The 7-inch profile was validated on a Pi 4: Ethernet DHCP, TFTP, NFS root,
-gallery display and touch, and the browser manager all work. The 4.3-inch and
-HDMI network profiles have not yet been tested on hardware.
+gallery display and touch, and the browser manager all work. The 7-inch SD
+image with the web camera controls and splash passed local Yocto builds; the
+new browser camera workflow and splash appearance still need Pi hardware
+confirmation. The 4.3-inch and HDMI network profiles have not yet been tested
+on hardware.
 
 ## Stable version 2.0 — 2026-11-14
 

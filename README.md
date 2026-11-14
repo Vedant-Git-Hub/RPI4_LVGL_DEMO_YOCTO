@@ -38,6 +38,44 @@ confirmation before erasing the selected drive. The project owner has
 confirmed display, touch, camera capture, gallery opening, and Wi-Fi on this
 panel.
 
+## Experimental wired network boot
+
+The `experimental/rpi4-netboot` branch adds a Pi 4 Ethernet boot profile for
+all three displays. Connect the Pi's Ethernet port directly to this Ubuntu
+host's `eno1` port. The host uses `10.42.0.1`; the Pi receives `10.42.0.100`.
+The host's Wi-Fi connection and default route remain separate. The host must
+stay powered on while the Pi uses its NFS root filesystem.
+
+Configure the host once (this installs dnsmasq and the NFS server, and needs
+your local sudo password):
+
+```bash
+sudo ./netboot/setup-host.sh
+```
+
+Set the Pi 4 EEPROM `BOOT_ORDER=0xf42` to try network boot, then USB storage,
+then restart. Build for the attached display and deploy the latest successful
+build after powering the Pi off:
+
+```bash
+./build 7_display net       # or 4_3_display / hdmi_display
+./flash.sh net              # deploys the recorded build; does not rebuild
+```
+
+`./flash.sh net` checks the bundle checksum and replaces the host's TFTP
+firmware and NFS root. It preserves photos, camera settings, Wi-Fi settings,
+and the saved hostname from the previous NFS root. For USB/SD cards, continue
+using `./flash.sh DRIVE`. A direct Ethernet connection is required for this
+profile; Wi-Fi cannot provide the initial network boot. The 7-inch profile
+has been booted on a Pi 4 with working gallery display, Goodix touch, NFS
+root, and browser manager. The 4.3-inch and HDMI network profiles still need
+hardware testing.
+
+If a future network boot reaches Linux but the gallery stays black, run
+`sudo ./netboot/diagnose.sh` on the host and reboot the Pi. The report appears
+at `/srv/photo-viewer-netboot/rootfs/opt/photo-viewer/boot-diagnostics.log`
+after about a minute. Run `sudo ./netboot/diagnose.sh --remove` when finished.
+
 ## Gallery
 
 The touchscreen library scans up to 64 images in

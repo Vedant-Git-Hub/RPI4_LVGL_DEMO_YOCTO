@@ -6,12 +6,13 @@ deploy_dir="$project_dir/.kas-work/build/tmp/deploy/images/raspberrypi4-64"
 record="$project_dir/.kas-work/build/latest-image.tsv"
 
 usage() {
-    printf 'Usage: %s DRIVE [usb|sd]\n' "${0##*/}" >&2
-    printf 'Examples: %s sdc, %s sdc sd, %s mmcblk0\n' "${0##*/}" "${0##*/}" "${0##*/}" >&2
+    printf 'Usage: %s DRIVE [usb|sd] | %s net\n' "${0##*/}" "${0##*/}" >&2
+    printf 'Examples: %s sdc, %s sdc sd, %s mmcblk0, %s net\n' "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" >&2
     printf 'The latest successful ./build image is used; no build runs during flashing.\n' >&2
 }
 
-if [[ $# -lt 1 || $# -gt 2 || ! $1 =~ ^(sd[a-z]+|mmcblk[0-9]+)$ ]]; then usage; exit 2; fi
+if [[ $# -lt 1 || $# -gt 2 || ( $1 != net && ! $1 =~ ^(sd[a-z]+|mmcblk[0-9]+)$ ) ||
+      ( $1 == net && $# != 1 ) ]]; then usage; exit 2; fi
 drive=$1
 expected_media=${2:-}
 if [[ -n $expected_media && $expected_media != usb && $expected_media != sd ]]; then usage; exit 2; fi
@@ -35,9 +36,14 @@ case "$display:$media" in
     hdmi_display:sd) image_base=photo-viewer-image-hdmi-sd ;;
     7_display:usb) image_base=photo-viewer-image-7inch ;;
     7_display:sd) image_base=photo-viewer-image-7inch-sd ;;
+    4_3_display:net) image_base=photo-viewer-image-net; overlay=vc4-kms-dsi-waveshare-800x480 ;;
+    7_display:net) image_base=photo-viewer-image-7inch-net; overlay=vc4-kms-dsi-waveshare-panel ;;
+    hdmi_display:net) image_base=photo-viewer-image-hdmi-net; overlay= ;;
     *) printf 'The latest build record has an unsupported display or boot medium.\n' >&2; exit 1 ;;
 esac
-if [[ ! $checksum =~ ^[0-9a-f]{64}$ || $image_file != "$image_base-raspberrypi4-64.rootfs-"*.wic.bz2 || $image_file == */* ]]; then
+extension=wic.bz2
+if [[ $media == net ]]; then extension=netboot.tar; fi
+if [[ ! $checksum =~ ^[0-9a-f]{64}$ || $image_file != "$image_base-raspberrypi4-64.rootfs-"*.$extension || $image_file == */* ]]; then
     printf 'The latest build record is invalid. Run ./build again.\n' >&2
     exit 1
 fi
@@ -53,6 +59,18 @@ if [[ ${actual_checksum%% *} != "$checksum" ]]; then
 fi
 if [[ -n $expected_media && $expected_media != "$media" ]]; then
     printf 'Latest image is for %s boot, but %s was requested. Run ./build for the intended medium.\n' "$media" "$expected_media" >&2
+    exit 2
+fi
+if [[ $drive == net ]]; then
+    if [[ $media != net ]]; then
+        printf 'Latest image is for %s boot. Run ./build DISPLAY net first.\n' "$media" >&2
+        exit 2
+    fi
+    "$project_dir/netboot/deploy.sh" "$image"
+    exit
+fi
+if [[ $media == net ]]; then
+    printf 'Latest image is for network boot. Deploy it with ./flash.sh net.\n' >&2
     exit 2
 fi
 if [[ $drive == mmcblk* && $media != sd ]]; then

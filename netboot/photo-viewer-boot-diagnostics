@@ -1,0 +1,27 @@
+#!/bin/sh
+# Run after boot has had time to probe the DSI display and start the gallery.
+sleep 60
+output=/opt/photo-viewer/boot-diagnostics.log
+{
+    date
+    printf '\nKernel command line:\n'
+    cat /proc/cmdline
+    printf '\nFramebuffer devices:\n'
+    ls -l /dev/fb* 2>&1
+    printf '\nDRM devices:\n'
+    ls -l /sys/class/drm 2>&1
+    printf '\nDisplay modules:\n'
+    lsmod 2>&1 | grep -E 'vc4|panel|ili210x|goodix|drm' | sed -n '1,40p'
+    printf '\nNetwork addresses:\n'
+    ip address 2>&1
+    printf '\nFailed units:\n'
+    systemctl --failed --no-pager --full 2>&1
+    printf '\nGallery service:\n'
+    systemctl status photo-viewer.service --no-pager --full -l 2>&1
+    printf '\nGallery journal:\n'
+    journalctl -b -u photo-viewer.service --no-pager -n 100 2>&1
+    printf '\nDisplay and power kernel journal from boot:\n'
+    journalctl -b -k --no-pager 2>&1 | grep -Ei 'dsi|drm|vc4|waveshare|panel|i2c|fb|voltage|throttl' | sed -n '1,180p'
+    printf '\nBoot warnings:\n'
+    journalctl -b -p warning --no-pager -n 100 2>&1
+} > "$output" 2>&1

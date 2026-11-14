@@ -6,14 +6,14 @@ build_dir="$project_dir/.kas-work/build"
 deploy_dir="$build_dir/tmp/deploy/images/raspberrypi4-64"
 
 usage() {
-    printf 'Usage: %s {4_3_display|7_display|hdmi_display} [usb|sd]\n' "${0##*/}" >&2
-    printf 'Examples: %s 7_display, %s hdmi_display sd\n' "${0##*/}" "${0##*/}" >&2
+    printf 'Usage: %s {4_3_display|7_display|hdmi_display} [usb|sd|net]\n' "${0##*/}" >&2
+    printf 'Examples: %s 7_display, %s hdmi_display sd, %s 7_display net\n' "${0##*/}" "${0##*/}" "${0##*/}" >&2
 }
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then usage; exit 2; fi
 display=$1
 media=${2:-usb}
-if [[ $media != usb && $media != sd ]]; then usage; exit 2; fi
+if [[ $media != usb && $media != sd && $media != net ]]; then usage; exit 2; fi
 
 case "$display:$media" in
     4_3_display:usb) profile=kas/rpi4-photo-viewer.yml; image_base=photo-viewer-image; overlay=vc4-kms-dsi-waveshare-800x480; root=/dev/sda2 ;;
@@ -22,10 +22,13 @@ case "$display:$media" in
     hdmi_display:sd) profile=kas/rpi4-photo-viewer-hdmi-sd.yml; image_base=photo-viewer-image-hdmi-sd; overlay=; root=/dev/mmcblk0p2 ;;
     7_display:usb) profile=kas/rpi4-photo-viewer-7inch.yml; image_base=photo-viewer-image-7inch; overlay=vc4-kms-dsi-waveshare-panel; root=/dev/sda2 ;;
     7_display:sd) profile=kas/rpi4-photo-viewer-7inch-sd.yml; image_base=photo-viewer-image-7inch-sd; overlay=vc4-kms-dsi-waveshare-panel; root=/dev/mmcblk0p2 ;;
+    4_3_display:net) profile=kas/rpi4-photo-viewer-net.yml; image_base=photo-viewer-image-net; overlay=vc4-kms-dsi-waveshare-800x480; root=/dev/nfs ;;
+    7_display:net) profile=kas/rpi4-photo-viewer-7inch-net.yml; image_base=photo-viewer-image-7inch-net; overlay=vc4-kms-dsi-waveshare-panel; root=/dev/nfs ;;
+    hdmi_display:net) profile=kas/rpi4-photo-viewer-hdmi-net.yml; image_base=photo-viewer-image-hdmi-net; overlay=; root=/dev/nfs ;;
     *) usage; exit 2 ;;
 esac
 
-for command in sha256sum readlink mktemp; do
+for command in sha256sum readlink mktemp tar; do
     if ! command -v "$command" >/dev/null 2>&1; then
         printf 'Required command is missing: %s\n' "$command" >&2
         exit 1
@@ -42,14 +45,16 @@ export KAS_BUILD_DIR="$build_dir"
 export KAS_WORK_DIR="$project_dir/.kas-work"
 ./kas-container build "$profile"
 
-image_link="$deploy_dir/$image_base-raspberrypi4-64.rootfs.wic.bz2"
+extension=wic.bz2
+if [[ $media == net ]]; then extension=tar.bz2; fi
+image_link="$deploy_dir/$image_base-raspberrypi4-64.rootfs.$extension"
 if [[ ! -r $image_link ]]; then
     printf 'Build succeeded, but the expected image is missing: %s\n' "$image_link" >&2
     exit 1
 fi
 image=$(readlink -f -- "$image_link")
 image_file=${image##*/}
-if [[ $image != "$deploy_dir/$image_file" || $image_file != "$image_base-raspberrypi4-64.rootfs-"*.wic.bz2 ]]; then
+if [[ $image != "$deploy_dir/$image_file" || $image_file != "$image_base-raspberrypi4-64.rootfs-"*.$extension ]]; then
     printf 'Unexpected image path: %s\n' "$image" >&2
     exit 1
 fi
@@ -66,6 +71,17 @@ if [[ " $cmdline_text " != *" root=$root "* ]]; then
     printf 'Boot root partition does not match the selected %s image.\n' "$media" >&2
     exit 1
 fi
+if [[ $media == net ]]; then
+    if [[ " $cmdline_text " != *" nfsroot=10.42.0.1:/srv/photo-viewer-netboot/rootfs,vers=3,tcp "* ||
+          " $cmdline_text " != *" ip=dhcp "* ||
+          ! -r $deploy_dir/Image || ! -r $deploy_dir/bcm2711-rpi-4-b.dtb ||
+          ! -r $deploy_dir/vc4-kms-v3d.dtbo ||
+          ! -r $deploy_dir/vc4-kms-v3d-pi4.dtbo ||
+          ! -r $deploy_dir/overlay_map.dtb ]]; then
+        printf 'Network boot files or NFS kernel command line are incomplete.\n' >&2
+        exit 1
+    fi
+fi
 if [[ -n $overlay ]]; then
     overlay_line="dtoverlay=$overlay"
     if [[ $display == 7_display ]]; then overlay_line+=",7_0_inchC,i2c1"; fi
@@ -78,6 +94,33 @@ elif [[ $config_text == *"dtoverlay=vc4-kms-dsi-"* ]]; then
     exit 1
 fi
 
+if [[ $media == net ]]; then
+    # Freeze boot files and rootfs together. A later build for another display
+    # must not silently replace the files used by ./flash.sh net.
+    staging=$(mktemp -d "$build_dir/netboot.XXXXXX")
+    bundle_temp=$(mktemp "$deploy_dir/.netboot.XXXXXX")
+    trap 'rm -rf -- "$staging"; rm -f -- "$bundle_temp"' EXIT
+    mkdir -p -- "$staging/tftp/overlays"
+    cp -a -- "$deploy_dir/bootfiles/." "$staging/tftp/"
+    install -m 0644 "$deploy_dir/Image" "$staging/tftp/kernel8.img"
+    install -m 0644 "$deploy_dir/bcm2711-rpi-4-b.dtb" "$staging/tftp/bcm2711-rpi-4-b.dtb"
+    install -m 0644 "$deploy_dir/vc4-kms-v3d.dtbo" "$staging/tftp/overlays/vc4-kms-v3d.dtbo"
+    # Firmware maps vc4-kms-v3d to the Pi 4 variant through overlay_map.dtb.
+    # Without the map, Linux has no DRM framebuffer and the LVGL service waits.
+    install -m 0644 "$deploy_dir/overlay_map.dtb" "$staging/tftp/overlays/overlay_map.dtb"
+    install -m 0644 "$deploy_dir/vc4-kms-v3d-pi4.dtbo" "$staging/tftp/overlays/vc4-kms-v3d-pi4.dtbo"
+    if [[ -n $overlay ]]; then
+        install -m 0644 "$deploy_dir/$overlay.dtbo" "$staging/tftp/overlays/$overlay.dtbo"
+    fi
+    ln -- "$image" "$staging/rootfs.tar.bz2"
+    tar -C "$staging" -cf "$bundle_temp" tftp rootfs.tar.bz2
+    image_file="${image_file%.tar.bz2}.netboot.tar"
+    image="$deploy_dir/$image_file"
+    mv -f -- "$bundle_temp" "$image"
+    rm -rf -- "$staging"
+    trap - EXIT
+fi
+
 checksum=$(sha256sum -- "$image")
 checksum=${checksum%% *}
 record=$(mktemp "$build_dir/latest-image.XXXXXX")
@@ -86,4 +129,8 @@ printf '%s\t%s\t%s\t%s\n' "$display" "$media" "$image_file" "$checksum" > "$reco
 mv -f -- "$record" "$build_dir/latest-image.tsv"
 trap - EXIT
 printf 'Built %s (%s boot): %s\n' "$display" "$media" "$image"
-printf 'Flash it with: ./flash.sh DRIVE\n'
+if [[ $media == net ]]; then
+    printf 'Deploy it to this host with: ./flash.sh net\n'
+else
+    printf 'Flash it with: ./flash.sh DRIVE\n'
+fi

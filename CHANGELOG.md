@@ -1,5 +1,15 @@
 # Release history
 
+## Experimental network boot branch — 2026-11-14
+
+- Add dedicated direct-Ethernet DHCP/TFTP and NFS services on the development
+  host, with a stable host address and a single Pi lease.
+- Add network build profiles for the 4.3-inch DSI, 7-inch DSI, and HDMI displays.
+  `./build DISPLAY net` packages the root filesystem and matching boot files
+  together; `./flash.sh net` deploys the verified bundle without rebuilding.
+- Preserve gallery photos and saved camera, Wi-Fi, and hostname settings when
+  replacing a network-boot image. Pi hardware validation remains outstanding.
+
 ## Stable version 2.0 — 2026-11-14
 
 - Add separate `./build` and `flash.sh` commands. The build script records the

@@ -1,0 +1,12 @@
+# Raspberry Pi 4 network boot with HDMI output.
+header:
+  version: 14
+  includes:
+    - kas/rpi4-photo-viewer-hdmi.yml
+
+local_conf_header:
+  photo-viewer-hdmi-net: |
+    PHOTO_VIEWER_BOOT_MEDIA = "net"
+    IMAGE_BASENAME:pn-photo-viewer-image = "photo-viewer-image-hdmi-net"
+    IMAGE_FSTYPES = "tar.bz2"
+    CMDLINE_ROOTFS = "root=/dev/nfs nfsroot=10.42.0.1:/srv/photo-viewer-netboot/rootfs,vers=3,tcp rw ip=dhcp rootwait"

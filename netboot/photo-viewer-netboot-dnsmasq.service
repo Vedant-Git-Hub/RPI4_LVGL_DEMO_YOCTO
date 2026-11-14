@@ -1,0 +1,13 @@
+[Unit]
+Description=Photo Viewer private Ethernet DHCP and TFTP
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dnsmasq --no-daemon --conf-file=/etc/photo-viewer-netboot/dnsmasq.conf
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

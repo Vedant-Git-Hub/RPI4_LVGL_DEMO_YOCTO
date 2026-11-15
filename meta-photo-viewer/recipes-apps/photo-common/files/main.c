@@ -22,6 +22,7 @@
 #include "display_layout.h"
 #include "video_ui.h"
 #include "audio_control.h"
+#include "brightness_control.h"
 #include "selection_state.h"
 
 #if !defined(PHOTO_APP_IMAGE) && !defined(PHOTO_APP_VIDEO) && \
@@ -58,6 +59,7 @@ static lv_obj_t *selected_label, *count_label, *status_label;
 static lv_obj_t *settings_screen, *settings_image_button;
 static lv_obj_t *drawer, *settings_video_button;
 static lv_obj_t *volume_screen, *volume_slider, *volume_label, *volume_status;
+static lv_obj_t *brightness_screen, *brightness_slider, *brightness_label, *brightness_status;
 static lv_obj_t *edit_screen, *edit_preview_image;
 static lv_obj_t *edit_status_label, *edit_rotation_label;
 static lv_obj_t *fit_button, *fill_button;
@@ -360,6 +362,7 @@ static void show_gallery(const char *message)
     if(wifi_screen) lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
     if(settings_screen) lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
     if(volume_screen) lv_obj_add_flag(volume_screen, LV_OBJ_FLAG_HIDDEN);
+    if(brightness_screen) lv_obj_add_flag(brightness_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(gallery, LV_OBJ_FLAG_HIDDEN);
     if(message) set_status(message);
 }
@@ -398,6 +401,7 @@ static void show_settings(void)
     lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(volume_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(brightness_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(gallery, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(settings_screen);
@@ -974,6 +978,82 @@ static void build_volume(lv_obj_t *root)
     lv_obj_add_flag(volume_screen, LV_OBJ_FLAG_HIDDEN);
 }
 
+static void brightness_changed(lv_event_t *event)
+{
+    (void)event;
+    int value = lv_slider_get_value(brightness_slider);
+    char caption[40];
+    snprintf(caption, sizeof(caption), "Display brightness: %d%%", value);
+    lv_label_set_text(brightness_label, caption);
+    if(!brightness_set_percent(value))
+        lv_label_set_text(brightness_status, "Could not adjust display backlight.");
+    else
+        lv_label_set_text(brightness_status, "Brightness applied. Release to save.");
+}
+
+static void brightness_released(lv_event_t *event)
+{
+    (void)event;
+    int value = lv_slider_get_value(brightness_slider);
+    if(!brightness_set_percent(value))
+        lv_label_set_text(brightness_status, "Could not adjust display backlight.");
+    else if(!brightness_save(value))
+        lv_label_set_text(brightness_status, "Applied, but could not save brightness.");
+    else
+        lv_label_set_text(brightness_status, "Brightness saved for the next boot.");
+}
+
+static void brightness_open(lv_event_t *event)
+{
+    (void)event;
+    int current = brightness_get_percent();
+    if(current < 0) {
+        lv_obj_add_state(brightness_slider, LV_STATE_DISABLED);
+        lv_label_set_text(brightness_label, "Display brightness unavailable");
+        lv_label_set_text(brightness_status,
+                          "This display has no writable Linux backlight.");
+    } else {
+        if(current < 5) current = 5;
+        lv_obj_remove_state(brightness_slider, LV_STATE_DISABLED);
+        lv_slider_set_value(brightness_slider, current, LV_ANIM_OFF);
+        char caption[40];
+        snprintf(caption, sizeof(caption), "Display brightness: %d%%", current);
+        lv_label_set_text(brightness_label, caption);
+        lv_label_set_text(brightness_status, "Drag to adjust; release to save.");
+    }
+    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(brightness_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(brightness_screen);
+}
+
+static void brightness_back(lv_event_t *event)
+{
+    (void)event;
+    show_settings();
+}
+
+static void build_brightness(lv_obj_t *root)
+{
+    brightness_screen = lv_obj_create(root);
+    lv_obj_set_size(brightness_screen, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
+    style_box(brightness_screen, 0x08151C, 0);
+    lv_obj_clear_flag(brightness_screen, LV_OBJ_FLAG_SCROLLABLE);
+    text(brightness_screen, "BRIGHTNESS", 0xFFFFFF, 24, 20);
+    lv_obj_t *back = button(brightness_screen, "BACK", 0x455A64,
+                            PHOTO_SCREEN_WIDTH - 122, 12, 100, 42);
+    lv_obj_add_event_cb(back, brightness_back, LV_EVENT_CLICKED, NULL);
+    brightness_label = text(brightness_screen, "Display brightness", 0xFDD835, 80, 140);
+    brightness_slider = lv_slider_create(brightness_screen);
+    lv_obj_set_pos(brightness_slider, 80, 200);
+    lv_obj_set_size(brightness_slider, PHOTO_SCREEN_WIDTH - 160, 22);
+    lv_slider_set_range(brightness_slider, 5, 100);
+    lv_obj_add_event_cb(brightness_slider, brightness_changed, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(brightness_slider, brightness_released, LV_EVENT_RELEASED, NULL);
+    brightness_status = text(brightness_screen, "", 0x00BFA5, 80, 265);
+    lv_obj_set_width(brightness_status, PHOTO_SCREEN_WIDTH - 160);
+    lv_obj_add_flag(brightness_screen, LV_OBJ_FLAG_HIDDEN);
+}
+
 static void build_settings(lv_obj_t *screen)
 {
     settings_screen = lv_obj_create(screen);
@@ -985,9 +1065,9 @@ static void build_settings(lv_obj_t *screen)
                             PHOTO_SCREEN_WIDTH - 122, 12, 100, 42);
     lv_obj_add_event_cb(back, settings_back_pressed, LV_EVENT_CLICKED, NULL);
     int settings_width = PHOTO_SCREEN_WIDTH - 160;
-    int start = PHOTO_SCREEN_HEIGHT == 600 ? 82 : 72;
-    int step = PHOTO_SCREEN_HEIGHT == 600 ? 78 : 70;
-    int height = PHOTO_SCREEN_HEIGHT == 600 ? 66 : 58;
+    int start = PHOTO_SCREEN_HEIGHT == 600 ? 75 : 68;
+    int step = PHOTO_SCREEN_HEIGHT == 600 ? 76 : 62;
+    int height = PHOTO_SCREEN_HEIGHT == 600 ? 62 : 52;
     lv_obj_t *network = button(settings_screen, "NETWORK SETTINGS", 0x1565C0, 80, start, settings_width, height);
     lv_obj_add_event_cb(network, wifi_open_pressed, LV_EVENT_CLICKED, NULL);
     lv_obj_t *camera = button(settings_screen, "CAMERA SETTINGS", 0x7B1FA2, 80, start + step, settings_width, height);
@@ -1002,6 +1082,9 @@ static void build_settings(lv_obj_t *screen)
     lv_obj_t *volume = button(settings_screen, "VOLUME", 0x536CA2,
                               80, start + 4 * step, settings_width, height);
     lv_obj_add_event_cb(volume, volume_open, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *brightness = button(settings_screen, "BRIGHTNESS", 0x94751B,
+                                  80, start + 5 * step, settings_width, height);
+    lv_obj_add_event_cb(brightness, brightness_open, LV_EVENT_CLICKED, NULL);
     text(settings_screen, "Select an image or video in its library to edit it.",
          0x00BFA5, 80, PHOTO_SCREEN_HEIGHT - 38);
     lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
@@ -1191,7 +1274,7 @@ int main(void)
     scan_files();
  #endif
  #if defined(PHOTO_APP_SETTINGS)
-    build_wifi(layout); build_settings(layout); build_volume(layout);
+    build_wifi(layout); build_settings(layout); build_volume(layout); build_brightness(layout);
     camera_ui_build(layout, PHOTO_DIR, camera_back, camera_saved, camera_settings_back);
     video_ui_build(layout, VIDEO_DIR, show_drawer, show_settings);
  #elif defined(PHOTO_APP_CAMERA)

@@ -1,5 +1,12 @@
 # Release history
 
+## Unreleased — brightness settings
+
+- Add a Brightness tab under Settings. It adjusts a detected Linux backlight
+  immediately, saves the chosen level, and restores it when Home starts.
+- Disable the slider when the display has no writable backlight. Network boot
+  deployment preserves the saved level.
+
 ## Stable version 3.0 — 2026-11-15
 
 - Add a four-app Home screen with separate Image Viewer, Video Player,

@@ -32,6 +32,9 @@ video player browses files in `/opt/photo-viewer/videos`, plays video and audio
 through FFmpeg/ALSA, and saves rotation and Fit/Fill choices across reboots. The
 original media file is unchanged. Settings contains the existing network,
 camera, and image controls plus video settings after a video is selected.
+Settings → Brightness adjusts a display's Linux backlight immediately and
+saves the level for the next boot. The slider is disabled on displays without
+a writable backlight, such as a typical HDMI monitor.
 To edit a video on the Pi, select it in Video Player, tap Home, then open
 Settings → Video Settings. Save applies those choices on the next playback.
 Play Selected opens a full-screen player. Tap the video to reveal Back,

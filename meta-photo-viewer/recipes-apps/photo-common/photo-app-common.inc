@@ -19,6 +19,7 @@ SRC_URI = " \
     file://wifi_control.c file://wifi_control.h \
     file://hostname_settings.c file://hostname_settings.h \
     file://audio_control.c file://audio_control.h \
+    file://brightness_control.c file://brightness_control.h \
     file://selection_state.c file://selection_state.h \
 "
 do_configure[noexec] = "1"

@@ -44,7 +44,7 @@ photo_viewer/
 │   │   ├── photo-launcher/       App drawer recipe and source
 │   │   ├── photo-images/         Image recipe and image support files
 │   │   ├── photo-videos/         Video recipe and player files
-│   │   ├── photo-settings/       Settings recipe and network/audio files
+│   │   ├── photo-settings/       Settings recipe and network/audio/backlight files
 │   │   ├── photo-camera/         Camera app recipe and UI files
 │   │   ├── photo-camera-service/ Camera service recipe and IPC files
 │   │   ├── photo-web/            Web service recipe, HTML, HTTP server
@@ -112,7 +112,7 @@ image, network, and audio helpers live in their named directories.
 | `photo-launcher/` | `launcher.c` |
 | `photo-images/` | `image_convert.c`, `image_settings.c` |
 | `photo-videos/` | `video_ui.c`, `video_backend.c` |
-| `photo-settings/` | `wifi_control.c`, `hostname_settings.c`, `audio_control.c` |
+| `photo-settings/` | `wifi_control.c`, `hostname_settings.c`, `audio_control.c`, `brightness_control.c` |
 | `photo-camera/` | `camera_ui.c` |
 | `photo-camera-service/` | `camera_service.c`, V4L2 backend, camera IPC client and protocol, service unit |
 | `photo-web/` | `media_server.c`, `web_server_main.c`, `index.html`, service unit |
@@ -139,6 +139,7 @@ and should not be confused with the source files above.
 | `/opt/photo-viewer/photos/` on the Pi | Gallery photos; network boot stores them in the host NFS root. |
 | `/opt/photo-viewer/videos/` on the Pi | Uploaded videos and saved per-video display settings. |
 | `/opt/photo-viewer/volume.conf` on the Pi | Saved headphone volume, preserved by network deployment. |
+| `/opt/photo-viewer/brightness.conf` on the Pi | Saved display backlight level, preserved by network deployment. |
 | `/opt/photo-viewer/camera.conf` on the Pi | Camera mode shared by the Pi screen and web controls. |
 | `/etc/photo-viewer-wpa.conf` on the Pi | Saved Wi-Fi profiles. |
 

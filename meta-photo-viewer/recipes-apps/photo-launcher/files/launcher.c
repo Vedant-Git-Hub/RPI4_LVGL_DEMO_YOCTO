@@ -12,6 +12,7 @@
 
 #include <lvgl/lvgl.h>
 #include <lvgl/src/drivers/evdev/lv_evdev.h>
+#include "brightness_control.h"
 #include "display_layout.h"
 
 static lv_display_t *display;
@@ -153,6 +154,8 @@ static void add_app(lv_obj_t *parent, int index, const char *title,
 
 int main(void)
 {
+    if(!brightness_restore())
+        fprintf(stderr, "photo-viewer: could not restore display brightness\n");
     lv_init();
     display = lv_linux_fbdev_create();
     if(!display) return 1;
@@ -176,7 +179,7 @@ int main(void)
     lv_obj_set_style_transform_pivot_y(root, 0, 0);
     lv_obj_set_style_transform_scale(root, scale, 0);
     lv_obj_t *title = lv_label_create(root);
-    lv_label_set_text(title, "VEDANT'S PHOTO GALLERY");
+    lv_label_set_text(title, "Stable_V3.0");
     lv_obj_set_style_text_color(title, lv_color_hex(0xFDD835), 0);
     lv_obj_set_pos(title, 28, 23);
     add_app(root, 0, "Camera", LV_SYMBOL_VIDEO, 0x85389B);

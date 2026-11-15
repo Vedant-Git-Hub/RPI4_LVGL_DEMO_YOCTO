@@ -26,9 +26,11 @@ Settings → Video Settings. Save applies those choices on the next playback.
 Play Selected opens a full-screen player. Tap the video to reveal Back,
 Play/Pause, and the seek slider; controls fade while playing.
 
-The experimental image enables the Pi 4 analogue audio device and sends video
-sound to the 3.5 mm jack. Settings → Volume adjusts the Headphones ALSA mixer
-and saves the level for later boots. The home screen shows Camera, Image
+The experimental image enables the Pi 4 analogue audio device and USB audio.
+Video sound goes to a connected USB audio device when available, otherwise to
+the 3.5 mm jack. Settings → Volume applies software gain during playback and
+saves the level for later boots. USB headset volume keys also adjust and save
+the level when the headset exposes standard Linux volume key events. The home screen shows Camera, Image
 Viewer, Settings, and Video Player as compact icons in alphabetical order.
 The boot command line explicitly enables `snd_bcm2835` headphones because the
 VC4 display overlay can supply an earlier `enable_headphones=0` parameter.
@@ -44,7 +46,7 @@ Image and video uploads have separate progress bars and completion messages.
 Build the 7-inch network image with `./build 7_display net`. Once the Pi is
 powered off, `./flash.sh net` deploys that completed build to the host's TFTP
 and NFS directories. The Pi then boots over Ethernet. This experimental
-branch's new player controls and headphone audio still need Pi testing.
+branch's USB routing and headset key controls still need Pi testing.
 
 ### 7-inch DSI LCD (C) profile
 

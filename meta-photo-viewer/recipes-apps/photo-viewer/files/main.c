@@ -898,9 +898,10 @@ static void video_edit_open(lv_event_t *event)
 static void volume_changed(lv_event_t *event)
 {
     (void)event;
+    int value = lv_slider_get_value(volume_slider);
+    audio_volume_apply(value);
     char caption[40];
-    snprintf(caption, sizeof(caption), "Headphone volume: %d%%",
-             lv_slider_get_value(volume_slider));
+    snprintf(caption, sizeof(caption), "Headphone volume: %d%%", value);
     lv_label_set_text(volume_label, caption);
 }
 
@@ -910,9 +911,6 @@ static void volume_released(lv_event_t *event)
     int value = lv_slider_get_value(volume_slider);
     if(!audio_volume_save(value)) {
         lv_label_set_text(volume_status, "Could not save volume setting.");
-    } else if(!audio_volume_apply(value)) {
-        lv_label_set_text(volume_status,
-                          "Saved. Headphone device unavailable; volume applies on playback.");
     } else lv_label_set_text(volume_status, "Volume saved and applied.");
 }
 
@@ -921,7 +919,7 @@ static void volume_open(lv_event_t *event)
     (void)event;
     lv_slider_set_value(volume_slider, audio_volume_load(), LV_ANIM_OFF);
     volume_changed(NULL);
-    lv_label_set_text(volume_status, "Drag the slider to adjust the 3.5 mm jack.");
+    lv_label_set_text(volume_status, "Drag to adjust USB or 3.5 mm headphone volume.");
     lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(volume_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(volume_screen);
@@ -1190,6 +1188,7 @@ int main(void)
     video_ui_build(layout, VIDEO_DIR, show_drawer, show_settings);
     build_drawer(layout);
     sd_boot = root_is_sd_card();
+    audio_volume_apply(audio_volume_load());
     refresh_card_mount();
     scan_files();
     lv_timer_create(card_poll, 5000, NULL);
@@ -1198,6 +1197,12 @@ int main(void)
     lv_obj_delete(splash);
     lv_refr_now(display);
     for(;;) {
+        int headset_volume = audio_input_poll();
+        if(headset_volume >= 0) {
+            lv_slider_set_value(volume_slider, headset_volume, LV_ANIM_OFF);
+            volume_changed(NULL);
+            lv_label_set_text(volume_status, "Headset button volume saved.");
+        }
         if(media_server_take_changed()) {
             if(!lv_obj_has_flag(viewer, LV_OBJ_FLAG_HIDDEN) ||
                !lv_obj_has_flag(edit_screen, LV_OBJ_FLAG_HIDDEN)) show_gallery(NULL);

@@ -101,7 +101,7 @@ do_install() {
         ${D}${sysconfdir}/modprobe.d/photo-viewer-audio.conf
 }
 
-RDEPENDS:${PN} += "lvgl kernel-module-panel-simple kernel-module-uvcvideo kernel-module-snd-bcm2835 imagemagick wpa-supplicant wpa-supplicant-cli ffmpeg alsa-utils-aplay alsa-utils-amixer"
+RDEPENDS:${PN} += "lvgl kernel-module-panel-simple kernel-module-uvcvideo kernel-module-snd-bcm2835 kernel-module-snd-usb-audio imagemagick wpa-supplicant wpa-supplicant-cli ffmpeg alsa-utils-aplay alsa-utils-amixer"
 RDEPENDS:${PN}:append = " ${@'kernel-module-panel-waveshare-dsi kernel-module-goodix-ts' if d.getVar('PHOTO_VIEWER_7INCH') == '1' else ''}"
 FILES:${PN} += " \
     /opt/photo-viewer/photos \

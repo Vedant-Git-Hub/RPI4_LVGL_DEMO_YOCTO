@@ -16,8 +16,9 @@
 
 struct video_playback {
     pthread_t thread;
+    pthread_t audio_thread;
     pthread_mutex_t lock;
-    int read_fd;
+    int read_fd, audio_read_fd, audio_write_fd, audio_thread_started;
     pid_t video_pid, audio_pid, speaker_pid;
     uint8_t *front, *back;
     size_t frame_size;
@@ -131,28 +132,78 @@ static pid_t spawn_video(const char *path, const char *filter, double start_seco
     return child;
 }
 
-static int spawn_audio(const char *path, double start_seconds,
-                       pid_t *decoder, pid_t *speaker)
+static void *relay_audio(void *argument)
 {
-    int output[2];
-    if(pipe(output)) return 0;
-    *speaker = fork();
-    if(*speaker == 0) {
-        close(output[1]);
-        dup2(output[0], STDIN_FILENO);
-        close(output[0]);
+    video_playback_t *player = argument;
+    sigset_t signals;
+    sigemptyset(&signals);
+    sigaddset(&signals, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &signals, NULL);
+    /* FFmpeg emits signed 16-bit stereo PCM. Scale samples before aplay so
+     * USB headsets without hardware mixer controls have a live volume. */
+    unsigned char data[8192];
+    size_t buffered = 0;
+    ssize_t count;
+    for(;;) {
+        count = read(player->audio_read_fd, data + buffered,
+                     sizeof(data) - buffered);
+        if(count < 0 && errno == EINTR) continue;
+        if(count <= 0) break;
+        size_t samples = (buffered + (size_t)count) & ~(size_t)1;
+        int volume = audio_volume_current();
+        for(size_t i = 0; i < samples; i += 2) {
+            int16_t sample = (int16_t)((unsigned int)data[i] |
+                                       ((unsigned int)data[i + 1] << 8));
+            int16_t scaled = (int16_t)((int32_t)sample * volume / 100);
+            data[i] = (unsigned char)scaled;
+            data[i + 1] = (unsigned char)((uint16_t)scaled >> 8);
+        }
+        size_t sent = 0;
+        while(sent < samples) {
+            ssize_t written = write(player->audio_write_fd, data + sent,
+                                    samples - sent);
+            if(written < 0 && errno == EINTR) continue;
+            if(written <= 0) goto finished;
+            sent += (size_t)written;
+        }
+        buffered = buffered + (size_t)count - samples;
+        if(buffered) data[0] = data[samples];
+    }
+finished:
+    close(player->audio_read_fd);
+    close(player->audio_write_fd);
+    player->audio_read_fd = player->audio_write_fd = -1;
+    return NULL;
+}
+
+static int spawn_audio(const char *path, double start_seconds,
+                       video_playback_t *player)
+{
+    int decoded[2], playback[2];
+    if(pipe(decoded)) return 0;
+    if(pipe(playback)) { close(decoded[0]); close(decoded[1]); return 0; }
+    char device[64];
+    audio_output_device(device, sizeof(device));
+    fprintf(stderr, "photo-viewer: audio output %s\n", device);
+    player->speaker_pid = fork();
+    if(player->speaker_pid == 0) {
+        close(decoded[0]); close(decoded[1]);
+        close(playback[1]);
+        dup2(playback[0], STDIN_FILENO);
+        close(playback[0]);
         /* Keep ALSA errors in the service journal for headphone diagnosis. */
-        char *const arguments[] = {"aplay", "-q", "-D", "sysdefault:CARD=Headphones", "-f", "S16_LE",
+        char *const arguments[] = {"aplay", "-q", "-D", device, "-f", "S16_LE",
                                    "-c", "2", "-r", "48000", NULL};
         execv("/usr/bin/aplay", arguments);
         _exit(127);
     }
-    if(*speaker < 0) { close(output[0]); close(output[1]); return 0; }
-    *decoder = fork();
-    if(*decoder == 0) {
-        close(output[0]);
-        dup2(output[1], STDOUT_FILENO);
-        close(output[1]);
+    if(player->speaker_pid < 0) goto fail;
+    player->audio_pid = fork();
+    if(player->audio_pid == 0) {
+        close(playback[0]); close(playback[1]);
+        close(decoded[0]);
+        dup2(decoded[1], STDOUT_FILENO);
+        close(decoded[1]);
         /* Keep decoder errors in the service journal as well. */
         char start[32];
         snprintf(start, sizeof(start), "%.3f", start_seconds);
@@ -162,9 +213,32 @@ static int spawn_audio(const char *path, double start_seconds,
         execv("/usr/bin/ffmpeg", arguments);
         _exit(127);
     }
-    close(output[0]); close(output[1]);
-    if(*decoder < 0) { kill(*speaker, SIGTERM); waitpid(*speaker, NULL, 0); *speaker = -1; return 0; }
+    close(decoded[1]); close(playback[0]);
+    if(player->audio_pid < 0) {
+        close(decoded[0]); close(playback[1]);
+        kill(player->speaker_pid, SIGTERM);
+        waitpid(player->speaker_pid, NULL, 0);
+        player->speaker_pid = -1;
+        return 0;
+    }
+    player->audio_read_fd = decoded[0];
+    player->audio_write_fd = playback[1];
+    if(pthread_create(&player->audio_thread, NULL, relay_audio, player)) {
+        kill(player->audio_pid, SIGTERM);
+        kill(player->speaker_pid, SIGTERM);
+        close(player->audio_read_fd); close(player->audio_write_fd);
+        player->audio_read_fd = player->audio_write_fd = -1;
+        waitpid(player->audio_pid, NULL, 0);
+        waitpid(player->speaker_pid, NULL, 0);
+        player->audio_pid = player->speaker_pid = -1;
+        return 0;
+    }
+    player->audio_thread_started = 1;
     return 1;
+fail:
+    close(decoded[0]); close(decoded[1]);
+    close(playback[0]); close(playback[1]);
+    return 0;
 }
 
 static void *read_video(void *argument)
@@ -264,7 +338,7 @@ video_playback_t *video_playback_start(const char *path, unsigned int width,
     if(!make_filter(filter, sizeof(filter), width, height, settings)) return NULL;
     video_playback_t *player = calloc(1, sizeof(*player));
     if(!player) return NULL;
-    player->read_fd = -1;
+    player->read_fd = player->audio_read_fd = player->audio_write_fd = -1;
     player->video_pid = player->audio_pid = player->speaker_pid = -1;
     player->frame_size = (size_t)width * height * 3;
     player->start_seconds = start_seconds;
@@ -273,12 +347,11 @@ video_playback_t *video_playback_start(const char *path, unsigned int width,
     if(!player->front || !player->back) goto fail;
     memset(player->front, 0, player->frame_size);
     pthread_mutex_init(&player->lock, NULL);
-    if(!audio_volume_apply(audio_volume_load()))
-        fprintf(stderr, "photo-viewer: Headphones mixer unavailable; check snd_bcm2835\n");
+    audio_volume_apply(audio_volume_load());
     player->video_pid = spawn_video(path, filter, start_seconds, &player->read_fd);
     if(player->video_pid < 0) goto fail_locked;
     /* Audio is optional: video continues when the Pi has no audio output. */
-    spawn_audio(path, start_seconds, &player->audio_pid, &player->speaker_pid);
+    spawn_audio(path, start_seconds, player);
     if(pthread_create(&player->thread, NULL, read_video, player)) goto fail_locked;
     clock_gettime(CLOCK_MONOTONIC, &player->started);
     return player;
@@ -286,6 +359,7 @@ fail_locked:
     if(player->video_pid > 0) { kill(player->video_pid, SIGTERM); waitpid(player->video_pid, NULL, 0); }
     if(player->audio_pid > 0) { kill(player->audio_pid, SIGTERM); waitpid(player->audio_pid, NULL, 0); }
     if(player->speaker_pid > 0) { kill(player->speaker_pid, SIGTERM); waitpid(player->speaker_pid, NULL, 0); }
+    if(player->audio_thread_started) pthread_join(player->audio_thread, NULL);
     if(player->read_fd >= 0) close(player->read_fd);
     pthread_mutex_destroy(&player->lock);
 fail:
@@ -350,6 +424,7 @@ void video_playback_stop(video_playback_t *player)
     if(player->audio_pid > 0) kill(player->audio_pid, SIGTERM);
     if(player->speaker_pid > 0) kill(player->speaker_pid, SIGTERM);
     pthread_join(player->thread, NULL);
+    if(player->audio_thread_started) pthread_join(player->audio_thread, NULL);
     if(player->read_fd >= 0) close(player->read_fd);
     if(player->video_pid > 0) waitpid(player->video_pid, NULL, 0);
     if(player->audio_pid > 0) waitpid(player->audio_pid, NULL, 0);

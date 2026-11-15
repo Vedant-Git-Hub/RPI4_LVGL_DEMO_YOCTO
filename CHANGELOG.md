@@ -25,6 +25,9 @@ new full-screen controls and headphone audio still need hardware validation.
 - Override the Pi 4 VC4 overlay's disabled-headphone boot parameter, load the
   analogue sound driver, and keep ALSA errors in the service journal. Return
   to Home when camera capture completes or the camera app exits.
+- Prefer connected USB audio devices, apply volume to PCM samples while playing,
+  and respond to standard USB headset volume and mute keys. Keep the 3.5 mm
+  jack as the fallback output.
 
 ## Stable version 2.1 — 2026-11-15
 

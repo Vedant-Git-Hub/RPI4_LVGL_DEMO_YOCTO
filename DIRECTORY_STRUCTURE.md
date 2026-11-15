@@ -40,7 +40,10 @@ photo_viewer/
 ├── meta-photo-viewer/            Custom Yocto layer
 │   ├── conf/layer.conf           Register this layer with BitBake
 │   ├── recipes-apps/photo-viewer/
-│   │   ├── photo-viewer_2.1.bb   Build/install the gallery application
+│   │   ├── photo-viewer_2.1.bb   Boot assets and Linux configuration
+│   │   ├── photo-app-common.inc  Shared build inputs for app recipes
+│   │   ├── photo-{launcher,images,videos,settings,camera}_1.0.bb
+│   │   ├── photo-{web,camera-service}_1.0.bb
 │   │   └── files/               C sources, web page, service files
 │   ├── recipes-core/images/
 │   │   └── photo-viewer-image.bb Define packages in the Pi root filesystem
@@ -74,25 +77,52 @@ the root filesystem archive and matching TFTP boot files.
 
 ## Application files inside the Yocto layer
 
+```mermaid
+flowchart LR
+    L["photo-launcher<br/>systemd starts at boot"] --> I["photo-images"]
+    L --> V["photo-videos"]
+    L --> S["photo-settings"]
+    L --> C["photo-camera"]
+    C -->|Unix socket| D["photo-camera-service"]
+    W["photo-web<br/>systemd service"] -->|Unix socket| D
+    S -->|wpa_cli| N["wpa_supplicant<br/>systemd service"]
+    I -.->|selected path in /run| S
+    V -.->|selected path in /run| S
+```
+
+Only one LVGL child owns the touchscreen and framebuffer at a time. The
+launcher waits for that child to exit, then redraws Home. The camera service
+opens the USB device on demand and serializes clients; it does not keep the
+camera streaming while no client needs it.
+
 ```text
 meta-photo-viewer/recipes-apps/photo-viewer/files/
-├── main.c                         LVGL screens, gallery, input handling
+├── launcher.c                    App drawer and child process supervisor
+├── main.c                        Shared LVGL app shell and screen entry points
+├── selection_state.c/.h          Selected image/video path IPC through /run
 ├── display_layout.h               Display-dependent sizes and layout values
-├── camera_backend.c/.h            Video4Linux2 camera capture
+├── camera_catalog.c              Camera mode discovery and saved mode
+├── camera_backend.c/.h            Video4Linux2 camera capture in service
+├── camera_service.c               Camera owner and Unix socket server
+├── camera_ipc_client.c            Local camera client
+├── camera_ipc.h                   Local camera protocol
 ├── camera_ui.c/.h                 Camera screen and capture controls
 ├── video_backend.c/.h            FFmpeg decoding, preview, and audio playback
 ├── video_ui.c/.h                 Video library, player, and saved display settings
-├── audio_control.c/.h            Saved 3.5 mm headphone volume and ALSA mixer
+├── audio_control.c/.h            Saved USB or 3.5 mm headphone volume
 ├── image_convert.c/.h            Decode and prepare images for display
 ├── image_settings.c/.h           Saved per-image rotation and Fit/Fill
 ├── media_server.c/.h             HTTP image/video manager and live camera API
+├── web_server_main.c             Independent web server entry point
 ├── index.html                    Browser interface
 ├── boot_splash.c                 Paint the startup artwork to /dev/fb0
 ├── boot-splash.bmp               Bold yellow welcome message
 ├── wifi_control.c/.h             Wi-Fi scan and connection control
 ├── hostname_settings.c/.h        Editable local hostname
-├── photo-viewer.service          Start the gallery after framebuffer setup
-├── photo-viewer-splash.service   Show artwork before the gallery starts
+├── photo-viewer.service          Start the app drawer after framebuffer setup
+├── photo-web.service             Start the browser server
+├── photo-camera-service.service  Own the USB camera for app and web clients
+├── photo-viewer-splash.service   Show artwork before the drawer starts
 ├── photo-viewer-wifi.service     Start Wi-Fi authentication
 ├── photo-viewer-wpa.conf         Initial Wi-Fi configuration
 ├── 20-photo-viewer-wlan.network  WLAN DHCP configuration
@@ -100,7 +130,7 @@ meta-photo-viewer/recipes-apps/photo-viewer/files/
 └── Makefile                     Compile the application for the Pi
 ```
 
-The `.bb` recipe installs these files into the Pi image; editing `files/`
+The `.bb` recipes install these files into the Pi image; editing `files/`
 alone does not update an already deployed Pi. Rebuild and redeploy the image
 to apply application changes.
 
@@ -136,13 +166,13 @@ flowchart LR
     B --> C["Linux DSI driver creates /dev/fb0"]
     C --> D["photo-viewer-splash.service draws boot-splash.bmp"]
     D --> E["LVGL keeps the same artwork visible"]
-    E --> F["Gallery ready"]
+    E --> F["App drawer ready"]
 ```
 
 The 7-inch DSI screen is blank before Linux initializes its panel driver.
 This image boots the kernel directly through Raspberry Pi firmware; U-Boot is
 not in the boot chain. The splash service runs when the framebuffer appears,
-then the LVGL app keeps the same message visible until its screens are built.
+then the LVGL launcher draws its home screen.
 
 The repository ignores `.kas-work/`, downloaded layers, build artifacts, and
 the downloaded `kas-container` wrapper. A fresh checkout regenerates them on

@@ -15,6 +15,14 @@ generated locally and are not stored in Git.
 
 ## Experimental video apps
 
+The experimental branch now builds the app drawer, image viewer, video player,
+settings, and camera as five separate executables and Yocto packages. The
+drawer starts each app as a child process and returns to Home when it exits.
+The browser server and USB camera owner run as independent systemd services;
+they communicate over a local Unix socket. Wi-Fi authentication continues in
+its own `wpa_supplicant` service. Image and video selections use small files
+under `/run/photo-viewer` so Settings can edit the selected item.
+
 The `experimental/video-apps` branch opens to a four-app home screen: Image
 Viewer, Video Player, Settings, and Camera. The video player browses files in
 `/opt/photo-viewer/videos`, plays their video and audio through FFmpeg/ALSA,
@@ -46,7 +54,7 @@ Image and video uploads have separate progress bars and completion messages.
 Build the 7-inch network image with `./build 7_display net`. Once the Pi is
 powered off, `./flash.sh net` deploys that completed build to the host's TFTP
 and NFS directories. The Pi then boots over Ethernet. This experimental
-branch's USB routing and headset key controls still need Pi testing.
+branch's separate processes and camera IPC still need Pi hardware testing.
 
 ### 7-inch DSI LCD (C) profile
 

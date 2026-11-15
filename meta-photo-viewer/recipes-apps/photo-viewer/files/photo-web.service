@@ -1,0 +1,13 @@
+[Unit]
+Description=Photo and video web server
+After=network.target photo-camera-service.service
+Wants=photo-camera-service.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/photo-web
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

@@ -9,12 +9,12 @@
 #include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <lvgl/lvgl.h>
 #include <lvgl/src/drivers/evdev/lv_evdev.h>
 
-#include "media_server.h"
 #include "image_convert.h"
 #include "wifi_control.h"
 #include "camera_ui.h"
@@ -22,6 +22,12 @@
 #include "display_layout.h"
 #include "video_ui.h"
 #include "audio_control.h"
+#include "selection_state.h"
+
+#if !defined(PHOTO_APP_IMAGE) && !defined(PHOTO_APP_VIDEO) && \
+    !defined(PHOTO_APP_SETTINGS) && !defined(PHOTO_APP_CAMERA)
+#error Select one application role
+#endif
 
 #define PHOTO_DIR "/opt/photo-viewer/photos"
 #define VIDEO_DIR "/opt/photo-viewer/videos"
@@ -62,6 +68,7 @@ static lv_obj_t *wifi_status_label, *wifi_keyboard;
 static lv_obj_t *hostname_field, *hostname_status_label;
 static wifi_network_t wifi_networks[WIFI_MAX_NETWORKS];
 static lv_timer_t *wifi_scan_timer;
+static struct timespec photo_directory_mtime, video_directory_mtime;
 
 static void style_box(lv_obj_t *obj, uint32_t color, int radius)
 {
@@ -260,6 +267,7 @@ static void select_file(int index)
     image_settings_load(files[index].path, &settings);
     if(selected != index) clear_gifs();
     selected = index;
+    selection_state_write("image", files[index].path);
     char source[sizeof(preview_path) + 3];
     snprintf(source, sizeof(source), "A:%s", preview_path);
     lv_image_set_src(preview_image, source);
@@ -276,7 +284,8 @@ static void select_file(int index)
         lv_obj_clear_flag(preview_image, LV_OBJ_FLAG_HIDDEN);
     }
     lv_label_set_text(selected_label, files[index].name);
-    lv_obj_remove_state(settings_image_button, LV_STATE_DISABLED);
+    if(settings_image_button)
+        lv_obj_remove_state(settings_image_button, LV_STATE_DISABLED);
     if(gif_file && !gif_playing)
         snprintf(message, sizeof(message), "GIF animation unavailable; showing first frame: %s",
                  files[index].name);
@@ -303,7 +312,8 @@ static void scan_files(void)
     selected = -1;
     clear_gifs();
     clear_converted();
-    lv_obj_add_state(settings_image_button, LV_STATE_DISABLED);
+    if(settings_image_button)
+        lv_obj_add_state(settings_image_button, LV_STATE_DISABLED);
     lv_label_set_text(selected_label, "Choose an image from the library");
     lv_obj_clean(file_list);
     directory = opendir(PHOTO_DIR);
@@ -339,39 +349,26 @@ static void scan_files(void)
 static void show_gallery(const char *message)
 {
     if(slideshow_timer) lv_timer_pause(slideshow_timer);
-    camera_ui_close();
-    video_ui_close();
-    lv_obj_add_flag(drawer, LV_OBJ_FLAG_HIDDEN);
+    if(camera_ui_is_open()) camera_ui_close();
+    if(video_ui_is_open()) video_ui_close();
     if(full_gif) lv_gif_pause(full_gif);
     if(preview_gif) lv_gif_restart(preview_gif);
     clear_edit_preview();
     lv_obj_add_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(wifi_keyboard, LV_OBJ_FLAG_HIDDEN);
+    if(wifi_keyboard) lv_obj_add_flag(wifi_keyboard, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(viewer, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(volume_screen, LV_OBJ_FLAG_HIDDEN);
+    if(wifi_screen) lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
+    if(settings_screen) lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
+    if(volume_screen) lv_obj_add_flag(volume_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(gallery, LV_OBJ_FLAG_HIDDEN);
     if(message) set_status(message);
 }
 
 static void show_drawer(void)
 {
-    if(slideshow_timer) lv_timer_pause(slideshow_timer);
-    camera_ui_close();
-    video_ui_close();
-    if(preview_gif) lv_gif_pause(preview_gif);
-    if(full_gif) lv_gif_pause(full_gif);
-    clear_edit_preview();
-    lv_obj_add_flag(gallery, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(viewer, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(wifi_keyboard, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(volume_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_clear_flag(drawer, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_move_foreground(drawer);
+    /* The launcher owns Home. Returning from an app frees its framebuffer,
+     * camera, decoder and LVGL resources before the launcher redraws. */
+    exit(0);
 }
 
 static void drawer_home_pressed(lv_event_t *event)
@@ -395,9 +392,8 @@ static void drawer_video_pressed(lv_event_t *event)
 
 static void show_settings(void)
 {
-    camera_ui_close();
-    video_ui_close();
-    lv_obj_add_flag(drawer, LV_OBJ_FLAG_HIDDEN);
+    if(camera_ui_is_open()) camera_ui_close();
+    if(video_ui_is_open()) video_ui_close();
     lv_obj_add_flag(wifi_keyboard, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
@@ -433,7 +429,9 @@ static void camera_settings_open(lv_event_t *event)
 
 static void camera_settings_back(void)
 {
+#if defined(PHOTO_APP_SETTINGS)
     show_settings();
+#endif
 }
 
 static void camera_open_pressed(lv_event_t *event)
@@ -453,7 +451,6 @@ static void camera_back(void)
 static void camera_saved(const char *name)
 {
     (void)name;
-    scan_files();
     show_drawer();
 }
 
@@ -535,6 +532,29 @@ static void card_poll(lv_timer_t *timer)
         else if(!lv_obj_has_flag(viewer, LV_OBJ_FLAG_HIDDEN) ||
                 !lv_obj_has_flag(edit_screen, LV_OBJ_FLAG_HIDDEN)) show_gallery(NULL);
         scan_files();
+    }
+}
+
+static void library_poll(lv_timer_t *timer)
+{
+    (void)timer;
+    struct stat info;
+    if(!stat(PHOTO_DIR, &info) &&
+       (info.st_mtim.tv_sec != photo_directory_mtime.tv_sec ||
+        info.st_mtim.tv_nsec != photo_directory_mtime.tv_nsec)) {
+        photo_directory_mtime = info.st_mtim;
+        if(gallery) {
+            if(!lv_obj_has_flag(viewer, LV_OBJ_FLAG_HIDDEN) ||
+               !lv_obj_has_flag(edit_screen, LV_OBJ_FLAG_HIDDEN))
+                show_gallery(NULL);
+            scan_files();
+        }
+    }
+    if(!stat(VIDEO_DIR, &info) &&
+       (info.st_mtim.tv_sec != video_directory_mtime.tv_sec ||
+        info.st_mtim.tv_nsec != video_directory_mtime.tv_nsec)) {
+        video_directory_mtime = info.st_mtim;
+        if(video_ui_is_open() || settings_screen) video_ui_rescan();
     }
 }
 
@@ -1182,32 +1202,54 @@ int main(void)
     lv_obj_center(splash_image);
     lv_refr_now(display);
 
-    build_gallery(layout); build_viewer(layout); build_wifi(layout);
-    build_edit(layout); build_settings(layout); build_volume(layout);
-    camera_ui_build(layout, PHOTO_DIR, camera_back, camera_saved, camera_settings_back);
-    video_ui_build(layout, VIDEO_DIR, show_drawer, show_settings);
-    build_drawer(layout);
+ #if defined(PHOTO_APP_IMAGE) || defined(PHOTO_APP_SETTINGS)
+    build_gallery(layout); build_viewer(layout); build_edit(layout);
     sd_boot = root_is_sd_card();
-    audio_volume_apply(audio_volume_load());
     refresh_card_mount();
     scan_files();
+ #endif
+ #if defined(PHOTO_APP_SETTINGS)
+    build_wifi(layout); build_settings(layout); build_volume(layout);
+    camera_ui_build(layout, PHOTO_DIR, camera_back, camera_saved, camera_settings_back);
+    video_ui_build(layout, VIDEO_DIR, show_drawer, show_settings);
+ #elif defined(PHOTO_APP_CAMERA)
+    camera_ui_build(layout, PHOTO_DIR, camera_back, camera_saved, camera_settings_back);
+ #elif defined(PHOTO_APP_VIDEO)
+    video_ui_build(layout, VIDEO_DIR, show_drawer, show_drawer);
+ #endif
+    audio_volume_apply(audio_volume_load());
+#if defined(PHOTO_APP_SETTINGS)
+    char saved_image[384];
+    if(selection_state_read("image", saved_image, sizeof(saved_image))) {
+        for(int i = 0; i < file_count; i++)
+            if(!strcmp(files[i].path, saved_image)) { select_file(i); break; }
+    }
+    video_ui_rescan();
+#endif
+ #if defined(PHOTO_APP_IMAGE) || defined(PHOTO_APP_SETTINGS)
     lv_timer_create(card_poll, 5000, NULL);
-    if(!media_server_start(PHOTO_DIR, VIDEO_DIR))
-        fprintf(stderr, "photo-viewer: could not start media server\n");
+ #endif
+    struct stat library_info;
+    if(!stat(PHOTO_DIR, &library_info)) photo_directory_mtime = library_info.st_mtim;
+    if(!stat(VIDEO_DIR, &library_info)) video_directory_mtime = library_info.st_mtim;
+    lv_timer_create(library_poll, 5000, NULL);
     lv_obj_delete(splash);
+#if defined(PHOTO_APP_IMAGE)
+    show_gallery(NULL);
+#elif defined(PHOTO_APP_VIDEO)
+    video_ui_open();
+#elif defined(PHOTO_APP_CAMERA)
+    camera_ui_open();
+#elif defined(PHOTO_APP_SETTINGS)
+    show_settings();
+#endif
     lv_refr_now(display);
     for(;;) {
         int headset_volume = audio_input_poll();
-        if(headset_volume >= 0) {
+        if(headset_volume >= 0 && volume_slider) {
             lv_slider_set_value(volume_slider, headset_volume, LV_ANIM_OFF);
             volume_changed(NULL);
             lv_label_set_text(volume_status, "Headset button volume saved.");
-        }
-        if(media_server_take_changed()) {
-            if(!lv_obj_has_flag(viewer, LV_OBJ_FLAG_HIDDEN) ||
-               !lv_obj_has_flag(edit_screen, LV_OBJ_FLAG_HIDDEN)) show_gallery(NULL);
-            scan_files();
-            video_ui_rescan();
         }
         lv_timer_handler();
         usleep(5000);

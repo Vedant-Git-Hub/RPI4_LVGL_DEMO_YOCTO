@@ -6,6 +6,13 @@ require recipes-core/images/core-image-base.bb
 IMAGE_INSTALL:append = " \
     fbset \
     photo-viewer \
+    photo-launcher \
+    photo-images \
+    photo-videos \
+    photo-settings \
+    photo-camera \
+    photo-web \
+    photo-camera-service \
     iw \
     wpa-supplicant \
     avahi-daemon \

@@ -2,6 +2,15 @@
 
 ## Experimental video apps — 2026-11-15
 
+### Modular process architecture
+
+- Package the drawer, four LVGL apps, web server, and camera owner separately.
+  The drawer launches one child app at a time and survives an app crash.
+- Move the web server out of the UI process. Give the camera app and web server
+  a Unix socket client for a single service that owns the USB camera.
+- Share the selected image or video path through `/run/photo-viewer` so the
+  settings app can offer the corresponding saved edit controls.
+
 - Add a four-app home screen for the image viewer, video player, settings, and
   camera. Move camera and settings entry points out of the image gallery.
 - Add a video library with FFmpeg playback, optional ALSA audio, and persistent

@@ -1,4 +1,4 @@
-SUMMARY = "LVGL touchscreen photo gallery and browser media server"
+SUMMARY = "Photo viewer system integration and boot assets"
 LICENSE = "MIT"
 PR = "r0"
 PHOTO_VIEWER_7INCH ??= "0"
@@ -52,19 +52,17 @@ SYSTEMD_AUTO_ENABLE:${PN} = "enable"
 do_configure[noexec] = "1"
 
 do_compile() {
-    oe_runmake PHOTO_VIEWER_7INCH="${PHOTO_VIEWER_7INCH}"
+    oe_runmake photo-viewer-splash PHOTO_VIEWER_7INCH="${PHOTO_VIEWER_7INCH}"
 }
 
 do_install() {
     install -d ${D}${bindir}
-    install -m 0755 photo-viewer ${D}${bindir}/photo-viewer
     install -m 0755 photo-viewer-splash ${D}${bindir}/photo-viewer-splash
 
     # Original photos live separately from application files.
     install -d ${D}/opt/photo-viewer/photos
     install -d ${D}/opt/photo-viewer/videos
     install -d ${D}${datadir}/photo-viewer
-    install -m 0644 ${WORKDIR}/index.html ${D}${datadir}/photo-viewer/index.html
     install -m 0644 ${WORKDIR}/boot-splash.bmp ${D}${datadir}/photo-viewer/boot-splash.bmp
 
     install -d ${D}${systemd_system_unitdir}
@@ -101,12 +99,11 @@ do_install() {
         ${D}${sysconfdir}/modprobe.d/photo-viewer-audio.conf
 }
 
-RDEPENDS:${PN} += "lvgl kernel-module-panel-simple kernel-module-uvcvideo kernel-module-snd-bcm2835 kernel-module-snd-usb-audio imagemagick wpa-supplicant wpa-supplicant-cli ffmpeg alsa-utils-aplay alsa-utils-amixer"
+RDEPENDS:${PN} += "photo-launcher photo-web photo-camera-service lvgl kernel-module-panel-simple kernel-module-uvcvideo kernel-module-snd-bcm2835 kernel-module-snd-usb-audio imagemagick wpa-supplicant wpa-supplicant-cli ffmpeg alsa-utils-aplay alsa-utils-amixer"
 RDEPENDS:${PN}:append = " ${@'kernel-module-panel-waveshare-dsi kernel-module-goodix-ts' if d.getVar('PHOTO_VIEWER_7INCH') == '1' else ''}"
 FILES:${PN} += " \
     /opt/photo-viewer/photos \
     /opt/photo-viewer/videos \
-    ${datadir}/photo-viewer/index.html \
     ${datadir}/photo-viewer/boot-splash.bmp \
     ${sysconfdir}/systemd/network/20-photo-viewer-wlan.network \
     ${sysconfdir}/photo-viewer-wpa.conf \

@@ -1,12 +1,12 @@
 [Unit]
-Description=LVGL photo gallery
-After=systemd-modules-load.service systemd-udev-settle.service photo-viewer-splash.service
-Wants=systemd-udev-settle.service photo-viewer-splash.service
+Description=LVGL photo app launcher
+After=systemd-modules-load.service systemd-udev-settle.service photo-viewer-splash.service photo-camera-service.service
+Wants=systemd-udev-settle.service photo-viewer-splash.service photo-camera-service.service
 
 [Service]
 Type=simple
 ExecStartPre=/bin/sh -c 'i=0; while [ "$i" -lt 30 ]; do [ -e /dev/fb0 ] && exit 0; i=$((i + 1)); sleep 1; done; exit 1'
-ExecStart=/usr/bin/photo-viewer
+ExecStart=/usr/bin/photo-launcher
 Restart=on-failure
 RestartSec=2
 

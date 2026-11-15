@@ -2,6 +2,7 @@
 #include "video_backend.h"
 #include "display_layout.h"
 #include "image_settings.h"
+#include "selection_state.h"
 
 #include <dirent.h>
 #include <stdint.h>
@@ -113,6 +114,7 @@ static void select_item(lv_event_t *event)
     if(index < 0 || index >= item_count) return;
     stop_playback();
     selected = index;
+    selection_state_write("video", items[index].path);
     lv_label_set_text(selected_label, items[index].name);
     show_selected_preview();
 }
@@ -122,6 +124,13 @@ void video_ui_rescan(void)
     char previous[128] = {0};
     if(selected >= 0 && selected < item_count)
         snprintf(previous, sizeof(previous), "%s", items[selected].name);
+    else {
+        char saved[512];
+        if(selection_state_read("video", saved, sizeof(saved))) {
+            const char *name = strrchr(saved, '/');
+            snprintf(previous, sizeof(previous), "%s", name ? name + 1 : saved);
+        }
+    }
     item_count = 0;
     selected = -1;
     lv_obj_clean(list);

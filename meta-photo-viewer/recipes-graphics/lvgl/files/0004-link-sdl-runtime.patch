@@ -1,0 +1,21 @@
+From: Vedant Bhale <vedant.bhale@ymail.com>
+Subject: [PATCH] Link SDL into the shared LVGL library
+Upstream-Status: Inappropriate [appliance-specific SDL configuration]
+Signed-off-by: Vedant Bhale <vedant.bhale@ymail.com>
+
+SDL is enabled in this LVGL build, so liblvgl.so must declare SDL as a
+runtime dependency. Linking only the video executable leaves the launcher
+with unresolved SDL symbols at boot.
+
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -18,6 +18,9 @@
+   include(${CMAKE_CURRENT_LIST_DIR}/env_support/cmake/custom.cmake)
+ endif()
+ 
++# LVGL's SDL display driver is included in this appliance's shared library.
++target_link_libraries(lvgl PRIVATE SDL2)
++
+ #[[
+     unfortunately CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS does not work for global data. 
+     for global data we still need decl specs.

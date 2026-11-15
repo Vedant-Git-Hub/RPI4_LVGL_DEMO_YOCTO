@@ -7,13 +7,16 @@
   Fall back to the existing framebuffer driver if KMSDRM or the renderer
   cannot be opened. Other apps keep their working framebuffer path.
 - Include SDL's KMSDRM backend and Mesa's GLES/EGL/GBM runtime drivers.
+- Link SDL directly into the shared LVGL library. Without this dependency,
+  `photo-launcher` exits with an unresolved `SDL_GetTicks` symbol and the boot
+  splash stays on screen.
 - Preserve the video's source frame rate instead of converting every file to
   25 fps. Update the LVGL frame timer to match the source rate, up to 60 fps.
 - Try the Pi 4 H.264 V4L2 decoder when its device is accessible and a test
   frame decodes successfully. Otherwise retain FFmpeg software decoding.
 - Log which decoder was selected in the application journal.
 
-The 7-inch network image builds successfully. When KMSDRM opens, the GPU
+The corrected 7-inch network image builds successfully. When KMSDRM opens, the GPU
 presents completed frames; FFmpeg scaling and LVGL shape drawing still run on
 the CPU. Playback quality and hardware decoder selection still need testing
 on the Pi. This work is isolated on `experimental/video-playback` and is not

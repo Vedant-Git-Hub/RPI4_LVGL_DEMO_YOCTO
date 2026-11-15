@@ -5,7 +5,7 @@ PACKAGECONFIG:append = " fbdev sdl"
 LVGL_CONFIG_SDL_FULLSCREEN = "1"
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
-SRC_URI:append = " file://0001-bmp-fix-file-open-result.patch file://0002-gif-accept-87a-and-local-palettes.patch file://0003-sdl-require-accelerated-renderer.patch"
+SRC_URI:append = " file://0001-bmp-fix-file-open-result.patch file://0002-gif-accept-87a-and-local-palettes.patch file://0003-sdl-require-accelerated-renderer.patch file://0004-link-sdl-runtime.patch"
 
 # The gallery, settings, and camera keyboards exhaust LVGL's default 64 KiB
 # object heap during startup. Keep enough headroom for menus and image views.

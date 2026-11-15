@@ -13,6 +13,28 @@ available as `stable-v2.0` and `stable-v1.0`. See
 [CHANGELOG.md](CHANGELOG.md) for their scope and validation. Build images are
 generated locally and are not stored in Git.
 
+## Experimental video apps
+
+The `experimental/video-apps` branch opens to a four-app home screen: Image
+Viewer, Video Player, Settings, and Camera. The video player browses files in
+`/opt/photo-viewer/videos`, plays their video and audio through FFmpeg/ALSA,
+and saves rotation and Fit/Fill choices for each video across reboots. The
+original media file is unchanged. Settings contains the existing network,
+camera, and image controls plus video settings after a video is selected.
+To edit a video on the Pi, select it in Video Player, tap Home, then open
+Settings → Video Settings. Save applies those choices on the next playback.
+
+The browser page can upload, play, download, copy, rename, delete, and set
+display options for videos. MP4, MKV, MOV, WebM, AVI, M4V, MPEG, TS, 3GP,
+WMV, and FLV names are accepted when FFprobe finds a video stream. Browser
+playback additionally depends on the browser's supported codecs. Network boot
+deployment preserves the video folder and its settings files.
+
+Build the 7-inch network image with `./build 7_display net`. Once the Pi is
+powered off, `./flash.sh net` deploys that completed build to the host's TFTP
+and NFS directories. The Pi then boots over Ethernet. This experimental
+branch has not yet been validated on the Pi hardware.
+
 ### 7-inch DSI LCD (C) profile
 
 The `7_display` profile supports the Waveshare **7inch DSI LCD (C)**,

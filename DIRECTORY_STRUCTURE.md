@@ -80,9 +80,11 @@ meta-photo-viewer/recipes-apps/photo-viewer/files/
 ├── display_layout.h               Display-dependent sizes and layout values
 ├── camera_backend.c/.h            Video4Linux2 camera capture
 ├── camera_ui.c/.h                 Camera screen and capture controls
+├── video_backend.c/.h            FFmpeg decoding, preview, and audio playback
+├── video_ui.c/.h                 Video library, player, and saved display settings
 ├── image_convert.c/.h            Decode and prepare images for display
 ├── image_settings.c/.h           Saved per-image rotation and Fit/Fill
-├── media_server.c/.h             HTTP photo manager and live camera API
+├── media_server.c/.h             HTTP image/video manager and live camera API
 ├── index.html                    Browser interface
 ├── boot_splash.c                 Paint the startup artwork to /dev/fb0
 ├── boot-splash.bmp               Bold yellow welcome message
@@ -114,13 +116,14 @@ and should not be confused with the source files above.
 | `/srv/photo-viewer-netboot/tftp/` on the host | Pi firmware, kernel, command line, and display overlays served by TFTP. |
 | `/srv/photo-viewer-netboot/rootfs/` on the host | Pi root filesystem exported over NFS. |
 | `/opt/photo-viewer/photos/` on the Pi | Gallery photos; network boot stores them in the host NFS root. |
+| `/opt/photo-viewer/videos/` on the Pi | Uploaded videos and saved per-video display settings. |
 | `/opt/photo-viewer/camera.conf` on the Pi | Camera mode shared by the Pi screen and web controls. |
 | `/etc/photo-viewer-wpa.conf` on the Pi | Saved Wi-Fi profiles. |
 
 The `netboot/setup-host.sh` script installs the host service configuration
 under `/etc/photo-viewer-netboot/`, `/etc/exports.d/`, and systemd. The
 `netboot/deploy.sh` script replaces the host TFTP and NFS directories while
-preserving gallery photos and saved device settings. Keep the host running
+preserving gallery photos, videos, and saved device settings. Keep the host running
 while the Pi uses network boot.
 
 ## Boot display handoff

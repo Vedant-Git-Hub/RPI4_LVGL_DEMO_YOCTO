@@ -23,6 +23,10 @@ SRC_URI = " \
     file://camera_backend.h \
     file://camera_ui.c \
     file://camera_ui.h \
+    file://video_backend.c \
+    file://video_backend.h \
+    file://video_ui.c \
+    file://video_ui.h \
     file://hostname_settings.c \
     file://hostname_settings.h \
     file://index.html \
@@ -56,6 +60,7 @@ do_install() {
 
     # Original photos live separately from application files.
     install -d ${D}/opt/photo-viewer/photos
+    install -d ${D}/opt/photo-viewer/videos
     install -d ${D}${datadir}/photo-viewer
     install -m 0644 ${WORKDIR}/index.html ${D}${datadir}/photo-viewer/index.html
     install -m 0644 ${WORKDIR}/boot-splash.bmp ${D}${datadir}/photo-viewer/boot-splash.bmp
@@ -90,10 +95,11 @@ do_install() {
     fi
 }
 
-RDEPENDS:${PN} += "lvgl kernel-module-panel-simple kernel-module-uvcvideo imagemagick wpa-supplicant wpa-supplicant-cli"
+RDEPENDS:${PN} += "lvgl kernel-module-panel-simple kernel-module-uvcvideo imagemagick wpa-supplicant wpa-supplicant-cli ffmpeg alsa-utils-aplay"
 RDEPENDS:${PN}:append = " ${@'kernel-module-panel-waveshare-dsi kernel-module-goodix-ts' if d.getVar('PHOTO_VIEWER_7INCH') == '1' else ''}"
 FILES:${PN} += " \
     /opt/photo-viewer/photos \
+    /opt/photo-viewer/videos \
     ${datadir}/photo-viewer/index.html \
     ${datadir}/photo-viewer/boot-splash.bmp \
     ${sysconfdir}/systemd/network/20-photo-viewer-wlan.network \

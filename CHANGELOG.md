@@ -1,5 +1,18 @@
 # Release history
 
+## Experimental video apps — 2026-11-15
+
+- Add a four-app home screen for the image viewer, video player, settings, and
+  camera. Move camera and settings entry points out of the image gallery.
+- Add a video library with FFmpeg playback, optional ALSA audio, and persistent
+  per-video rotation and Fit/Fill settings.
+- Add browser video upload, playback with byte-range requests, management, and
+  saved display settings. Preserve videos across network boot deployments.
+- Include FFmpeg and ALSA playback utilities in the Yocto image.
+
+This work is isolated on `experimental/video-apps` and is not part of a
+stable release. Hardware playback and audio still require Pi validation.
+
 ## Stable version 2.1 — 2026-11-15
 
 - Merge network boot into the main branch. Add dedicated direct-Ethernet

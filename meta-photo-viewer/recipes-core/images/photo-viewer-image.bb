@@ -9,6 +9,8 @@ IMAGE_INSTALL:append = " \
     iw \
     wpa-supplicant \
     avahi-daemon \
+    ffmpeg \
+    alsa-utils-aplay \
 "
 
 # Network builds need the firmware/kernel deploy output even though they do

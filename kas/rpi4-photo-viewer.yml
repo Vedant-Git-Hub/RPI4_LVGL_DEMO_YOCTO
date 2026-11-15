@@ -54,6 +54,7 @@ local_conf_header:
     # Required by the Raspberry Pi 4 BSP for its onboard Wi-Fi/Bluetooth
     # firmware package (linux-firmware-rpidistro).
     LICENSE_FLAGS_ACCEPTED = "synaptics-killswitch"
+    LICENSE_FLAGS_ACCEPTED:append = " commercial"
 
     # The Waveshare panel overlay is not part of meta-raspberrypi's default
     # deploy list. Build and place it in bootfs/overlays for firmware to load.

@@ -20,8 +20,10 @@
 #include "camera_ui.h"
 #include "hostname_settings.h"
 #include "display_layout.h"
+#include "video_ui.h"
 
 #define PHOTO_DIR "/opt/photo-viewer/photos"
+#define VIDEO_DIR "/opt/photo-viewer/videos"
 #define CARD_DEVICE "/dev/mmcblk0p1"
 #define MAX_FILES 64
 #define PREVIEW_WIDTH PHOTO_PREVIEW_WIDTH
@@ -47,6 +49,7 @@ static lv_obj_t *gallery, *viewer, *file_list, *preview_image, *full_image;
 static lv_obj_t *preview_viewport, *preview_gif, *full_gif;
 static lv_obj_t *selected_label, *count_label, *status_label;
 static lv_obj_t *settings_screen, *settings_image_button;
+static lv_obj_t *drawer, *settings_video_button;
 static lv_obj_t *edit_screen, *edit_preview_image;
 static lv_obj_t *edit_status_label, *edit_rotation_label;
 static lv_obj_t *fit_button, *fill_button;
@@ -335,6 +338,8 @@ static void show_gallery(const char *message)
 {
     if(slideshow_timer) lv_timer_pause(slideshow_timer);
     camera_ui_close();
+    video_ui_close();
+    lv_obj_add_flag(drawer, LV_OBJ_FLAG_HIDDEN);
     if(full_gif) lv_gif_pause(full_gif);
     if(preview_gif) lv_gif_restart(preview_gif);
     clear_edit_preview();
@@ -347,9 +352,48 @@ static void show_gallery(const char *message)
     if(message) set_status(message);
 }
 
+static void show_drawer(void)
+{
+    if(slideshow_timer) lv_timer_pause(slideshow_timer);
+    camera_ui_close();
+    video_ui_close();
+    if(preview_gif) lv_gif_pause(preview_gif);
+    if(full_gif) lv_gif_pause(full_gif);
+    clear_edit_preview();
+    lv_obj_add_flag(gallery, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(viewer, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(wifi_keyboard, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(drawer, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(drawer);
+}
+
+static void drawer_home_pressed(lv_event_t *event)
+{
+    (void)event;
+    show_drawer();
+}
+
+static void drawer_image_pressed(lv_event_t *event)
+{
+    (void)event;
+    show_gallery(NULL);
+}
+
+static void drawer_video_pressed(lv_event_t *event)
+{
+    (void)event;
+    lv_obj_add_flag(drawer, LV_OBJ_FLAG_HIDDEN);
+    video_ui_open();
+}
+
 static void show_settings(void)
 {
     camera_ui_close();
+    video_ui_close();
+    lv_obj_add_flag(drawer, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(wifi_keyboard, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(wifi_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
@@ -358,6 +402,8 @@ static void show_settings(void)
     lv_obj_move_foreground(settings_screen);
     if(selected >= 0) lv_obj_remove_state(settings_image_button, LV_STATE_DISABLED);
     else lv_obj_add_state(settings_image_button, LV_STATE_DISABLED);
+    if(video_ui_has_selection()) lv_obj_remove_state(settings_video_button, LV_STATE_DISABLED);
+    else lv_obj_add_state(settings_video_button, LV_STATE_DISABLED);
 }
 
 static void settings_open_pressed(lv_event_t *event)
@@ -370,7 +416,7 @@ static void settings_open_pressed(lv_event_t *event)
 static void settings_back_pressed(lv_event_t *event)
 {
     (void)event;
-    show_gallery(NULL);
+    show_drawer();
 }
 
 static void camera_settings_open(lv_event_t *event)
@@ -390,12 +436,13 @@ static void camera_open_pressed(lv_event_t *event)
     (void)event;
     if(preview_gif) lv_gif_pause(preview_gif);
     lv_obj_add_flag(gallery, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(drawer, LV_OBJ_FLAG_HIDDEN);
     camera_ui_open();
 }
 
 static void camera_back(void)
 {
-    show_gallery("Back in the image library.");
+    show_drawer();
 }
 
 static void camera_saved(const char *name)
@@ -843,6 +890,14 @@ static void edit_open(lv_event_t *event)
     if(!edit_refresh()) show_settings();
 }
 
+static void video_edit_open(lv_event_t *event)
+{
+    (void)event;
+    if(!video_ui_has_selection()) return;
+    lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
+    video_ui_open_settings();
+}
+
 static void build_settings(lv_obj_t *screen)
 {
     settings_screen = lv_obj_create(screen);
@@ -850,17 +905,23 @@ static void build_settings(lv_obj_t *screen)
     style_box(settings_screen, 0x08151C, 0);
     lv_obj_clear_flag(settings_screen, LV_OBJ_FLAG_SCROLLABLE);
     text(settings_screen, "SETTINGS", 0xFFFFFF, 24, 20);
-    lv_obj_t *back = button(settings_screen, "BACK", 0x455A64, 678, 12, 100, 42);
+    lv_obj_t *back = button(settings_screen, "HOME", 0x455A64,
+                            PHOTO_SCREEN_WIDTH - 122, 12, 100, 42);
     lv_obj_add_event_cb(back, settings_back_pressed, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *network = button(settings_screen, "NETWORK SETTINGS", 0x1565C0, 80, 105, 640, 70);
+    int settings_width = PHOTO_SCREEN_WIDTH - 160;
+    lv_obj_t *network = button(settings_screen, "NETWORK SETTINGS", 0x1565C0, 80, 82, settings_width, 66);
     lv_obj_add_event_cb(network, wifi_open_pressed, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *camera = button(settings_screen, "CAMERA SETTINGS", 0x7B1FA2, 80, 195, 640, 70);
+    lv_obj_t *camera = button(settings_screen, "CAMERA SETTINGS", 0x7B1FA2, 80, 160, settings_width, 66);
     lv_obj_add_event_cb(camera, camera_settings_open, LV_EVENT_CLICKED, NULL);
-    settings_image_button = button(settings_screen, "IMAGE SETTINGS", 0x00A152, 80, 285, 640, 70);
+    settings_image_button = button(settings_screen, "IMAGE SETTINGS", 0x00A152, 80, 238, settings_width, 66);
     lv_obj_add_state(settings_image_button, LV_STATE_DISABLED);
     lv_obj_add_event_cb(settings_image_button, edit_open, LV_EVENT_CLICKED, NULL);
-    text(settings_screen, "Select a photo in the gallery to edit its image settings.",
-         0x00BFA5, 80, 385);
+    settings_video_button = button(settings_screen, "VIDEO SETTINGS", 0xB55B18,
+                                   80, 316, settings_width, 66);
+    lv_obj_add_state(settings_video_button, LV_STATE_DISABLED);
+    lv_obj_add_event_cb(settings_video_button, video_edit_open, LV_EVENT_CLICKED, NULL);
+    text(settings_screen, "Select an image or video in its library to edit it.",
+         0x00BFA5, 80, 405);
     lv_obj_add_flag(settings_screen, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -910,11 +971,10 @@ static void build_gallery(lv_obj_t *screen)
     lv_obj_t *head = lv_obj_create(gallery); lv_obj_set_size(head, PHOTO_SCREEN_WIDTH, 68); style_box(head, 0x101010, 0);
     lv_obj_t *badge = lv_obj_create(head); lv_obj_set_size(badge, 42, 42); lv_obj_set_pos(badge, 18, 13); style_box(badge, 0xE53935, 12); storage_label = text(badge, "PI", 0xFFFFFF, 11, 13);
     text(head, "PHOTO GALLERY", 0xFFFFFF, 72, 16); text(head, "Image library", 0x00BFA5, 72, 38);
-    count_label = text(head, "FOLDER OFFLINE", 0xFDD835, 365, 25);
-    lv_obj_t *camera_button = button(head, "CAMERA", 0x7B1FA2, PHOTO_GALLERY_CAMERA_X, 15, 105, 38);
-    lv_obj_add_event_cb(camera_button, camera_open_pressed, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *settings = button(head, "SETTINGS", 0x455A64, PHOTO_GALLERY_SETTINGS_X, 15, 100, 38);
-    lv_obj_add_event_cb(settings, settings_open_pressed, LV_EVENT_CLICKED, NULL);
+    count_label = text(head, "FOLDER OFFLINE", 0xFDD835,
+                       PHOTO_SCREEN_WIDTH == 800 ? 285 : 365, 25);
+    lv_obj_t *home = button(head, "HOME", 0x455A64, PHOTO_GALLERY_CAMERA_X, 15, 105, 38);
+    lv_obj_add_event_cb(home, drawer_home_pressed, LV_EVENT_CLICKED, NULL);
     lv_obj_t *refresh = button(head, "RESCAN", 0x1565C0, PHOTO_GALLERY_RESCAN_X, 15, 102, 38); lv_obj_add_event_cb(refresh, rescan, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *left = lv_obj_create(gallery); lv_obj_set_pos(left, 18, 82); lv_obj_set_size(left, 242, PHOTO_GALLERY_PANEL_HEIGHT); style_box(left, 0x101010, 16);
@@ -942,6 +1002,41 @@ static void build_gallery(lv_obj_t *screen)
     lv_image_set_pivot(preview_image, 0, 0);
     lv_obj_t *footer = lv_obj_create(gallery); lv_obj_set_pos(footer, 18, PHOTO_GALLERY_FOOTER_Y); lv_obj_set_size(footer, PHOTO_GALLERY_FOOTER_WIDTH, 24); style_box(footer, 0x003D3A, 7);
     status_label = text(footer, "Scanning photo folder...", 0xFFFFFF, 8, 4);
+}
+
+static void build_drawer(lv_obj_t *root)
+{
+    drawer = lv_obj_create(root);
+    lv_obj_set_size(drawer, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
+    style_box(drawer, 0x08151C, 0);
+    lv_obj_clear_flag(drawer, LV_OBJ_FLAG_SCROLLABLE);
+    text(drawer, "VEDANT'S PHOTO GALLERY", 0xFDD835, 28, 23);
+    text(drawer, "Choose an app", 0x00BFA5, 28, 54);
+    int gap = 18;
+    int width = (PHOTO_SCREEN_WIDTH - 96 - gap) / 2;
+    int height = (PHOTO_SCREEN_HEIGHT - 142 - gap) / 2;
+    const char *titles[] = {"IMAGE VIEWER", "VIDEO PLAYER", "SETTINGS", "CAMERA"};
+    const char *symbols[] = {"IMG", "VID", "SET", "CAM"};
+    const uint32_t colors[] = {0x008E6A, 0x175CA8, 0x8A541A, 0x85389B};
+    lv_event_cb_t callbacks[] = {drawer_image_pressed, drawer_video_pressed,
+                                  settings_open_pressed, camera_open_pressed};
+    for(int i = 0; i < 4; i++) {
+        int x = 39 + (i % 2) * (width + gap);
+        int y = 95 + (i / 2) * (height + gap);
+        lv_obj_t *tile = button(drawer, titles[i], colors[i], x, y, width, height);
+        lv_obj_t *caption = lv_obj_get_child(tile, 0);
+        lv_obj_set_pos(caption, 6, height - 42);
+        lv_obj_t *icon = lv_obj_create(tile);
+        lv_obj_set_size(icon, 70, 70);
+        lv_obj_set_pos(icon, (width - 70) / 2, (height - 98) / 2);
+        style_box(icon, 0xFFFFFF, 35);
+        lv_obj_set_style_bg_opa(icon, LV_OPA_30, 0);
+        lv_obj_clear_flag(icon, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_t *symbol = text(icon, symbols[i], 0xFFFFFF, 0, 0);
+        lv_obj_center(symbol);
+        lv_obj_add_event_cb(tile, callbacks[i], LV_EVENT_CLICKED, NULL);
+    }
 }
 
 static void build_viewer(lv_obj_t *screen)
@@ -1003,11 +1098,13 @@ int main(void)
     build_gallery(layout); build_viewer(layout); build_wifi(layout);
     build_edit(layout); build_settings(layout);
     camera_ui_build(layout, PHOTO_DIR, camera_back, camera_saved, camera_settings_back);
+    video_ui_build(layout, VIDEO_DIR, show_drawer, show_settings);
+    build_drawer(layout);
     sd_boot = root_is_sd_card();
     refresh_card_mount();
     scan_files();
     lv_timer_create(card_poll, 5000, NULL);
-    if(!media_server_start(PHOTO_DIR))
+    if(!media_server_start(PHOTO_DIR, VIDEO_DIR))
         fprintf(stderr, "photo-viewer: could not start media server\n");
     lv_obj_delete(splash);
     lv_refr_now(display);
@@ -1016,6 +1113,7 @@ int main(void)
             if(!lv_obj_has_flag(viewer, LV_OBJ_FLAG_HIDDEN) ||
                !lv_obj_has_flag(edit_screen, LV_OBJ_FLAG_HIDDEN)) show_gallery(NULL);
             scan_files();
+            video_ui_rescan();
         }
         lv_timer_handler();
         usleep(5000);

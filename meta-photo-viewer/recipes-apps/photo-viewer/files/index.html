@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Photo Gallery</title>
+<title>Vedant's Media Gallery</title>
 <style>
   body { font: 16px system-ui; margin: 20px auto; padding: 0 16px; max-width: 850px; color: #f5f7fa; background: #101820 }
   h1 { margin-bottom: 4px }
@@ -17,6 +17,9 @@
   #camera-view { display: block; width: 100%; max-height: 65vh; object-fit: contain; background: #000; aspect-ratio: 4 / 3 }
   .camera-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 }
   #camera-panel[hidden], progress[hidden] { display: none }
+  #video-preview { display: block; width: 100%; max-height: 60vh; background: #000; object-fit: contain; margin: 12px 0 }
+  #video-editor { padding: 12px; border: 1px solid #456; border-radius: 8px }
+  #video-editor[hidden], #video-preview[hidden] { display: none }
 </style>
 <h1>Photo Gallery</h1>
 <p>Upload original photos or capture from the USB camera connected to the Pi.</p>
@@ -42,11 +45,33 @@
 <p id="status" role="status"></p>
 <h2>Stored images</h2>
 <ul id="files"></ul>
+<section>
+  <h2>Videos</h2>
+  <p>Upload MP4, MKV, MOV, WebM and other supported video files. Browser playback depends on the browser's codecs; the Pi player uses FFmpeg.</p>
+  <input id="video-original" type="file" accept="video/*,.mkv,.avi,.ts,.wmv,.flv">
+  <button id="video-upload">Upload video</button>
+  <p id="video-status" role="status"></p>
+  <video id="video-preview" controls playsinline hidden></video>
+  <div id="video-editor" hidden>
+    <label>Rotation <select id="video-rotation"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label>
+    <label>Display <select id="video-mode"><option value="fit">Fit whole video</option><option value="fill">Fill display</option></select></label>
+    <button id="video-save">Save settings</button>
+  </div>
+  <h3>Stored videos</h3>
+  <ul id="videos"></ul>
+</section>
 <script>
 const original = document.querySelector('#original');
 const status = document.querySelector('#status');
 const progress = document.querySelector('#progress');
 const files = document.querySelector('#files');
+const videos = document.querySelector('#videos');
+const videoPreview = document.querySelector('#video-preview');
+const videoStatus = document.querySelector('#video-status');
+const videoEditor = document.querySelector('#video-editor');
+const videoRotation = document.querySelector('#video-rotation');
+const videoMode = document.querySelector('#video-mode');
+let selectedVideo = '';
 const cameraPanel = document.querySelector('#camera-panel');
 const cameraView = document.querySelector('#camera-view');
 const cameraStatus = document.querySelector('#camera-status');
@@ -238,7 +263,7 @@ async function refresh() {
   }
 }
 
-function send(blob, name) {
+function send(blob, name, route = '/upload') {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     progress.hidden = false;
@@ -253,7 +278,7 @@ function send(blob, name) {
     xhr.onload = () => xhr.status >= 200 && xhr.status < 300
       ? resolve(xhr.responseText) : reject(Error(xhr.responseText || `HTTP ${xhr.status}`));
     xhr.onerror = () => reject(Error('Network error'));
-    xhr.open('PUT', '/upload?name=' + encodeURIComponent(name));
+    xhr.open('PUT', route + '?name=' + encodeURIComponent(name));
     xhr.send(blob);
   });
 }
@@ -265,6 +290,109 @@ document.querySelector('#upload').onclick = async () => {
   catch (error) { status.textContent = error.message; }
 };
 
+function updateVideoPreview() {
+  const rotation = Number(videoRotation.value);
+  const fill = videoMode.value === 'fill';
+  videoPreview.style.objectFit = fill ? 'cover' : 'contain';
+  videoPreview.style.transform = `rotate(${rotation}deg)`;
+  videoPreview.style.margin = rotation % 180 ? '5% auto' : '12px 0';
+}
+videoRotation.onchange = updateVideoPreview;
+videoMode.onchange = updateVideoPreview;
+
+async function openVideo(name) {
+  selectedVideo = name;
+  const response = await fetch('/video-settings?name=' + encodeURIComponent(name));
+  if (!response.ok) throw Error(await response.text());
+  const settings = await response.json();
+  videoRotation.value = String(settings.rotation);
+  videoMode.value = settings.mode;
+  videoEditor.hidden = false;
+  videoPreview.hidden = false;
+  videoPreview.src = '/video-file?name=' + encodeURIComponent(name);
+  updateVideoPreview();
+  videoPreview.load();
+  await videoPreview.play().catch(() => {});
+}
+
+document.querySelector('#video-save').onclick = async () => {
+  if (!selectedVideo) return;
+  const query = new URLSearchParams({name: selectedVideo, rotation: videoRotation.value, mode: videoMode.value});
+  try {
+    await request('/video-settings?' + query, {method: 'POST'});
+    videoStatus.textContent = 'Saved playback settings for ' + selectedVideo;
+    updateVideoPreview();
+  } catch (error) { videoStatus.textContent = error.message; }
+};
+
+async function refreshVideos() {
+  try {
+    const response = await fetch('/api/videos');
+    if (!response.ok) throw Error(await response.text());
+    const entries = await response.json();
+    videos.replaceChildren();
+    for (const item of entries) {
+      const row = document.createElement('li');
+      const title = document.createElement('span');
+      title.textContent = `${item.name} (${Math.ceil(item.size / 1048576)} MB)`;
+      row.append(title);
+      const play = document.createElement('button');
+      play.textContent = 'Play / Edit';
+      play.onclick = async () => {
+        try { await openVideo(item.name); }
+        catch (error) { videoStatus.textContent = error.message; }
+      };
+      row.append(play);
+      const download = document.createElement('a');
+      download.href = '/video-file?name=' + encodeURIComponent(item.name);
+      download.download = item.name;
+      download.textContent = 'Download';
+      row.append(download);
+      for (const [label, action] of [
+        ['Copy', async () => {
+          const to = prompt('Copy to filename:', item.name);
+          if (to) await request('/video-copy?from=' + encodeURIComponent(item.name) + '&to=' + encodeURIComponent(to), {method:'POST'});
+        }],
+        ['Rename', async () => {
+          const to = prompt('New filename:', item.name);
+          if (to) await request('/video-rename?from=' + encodeURIComponent(item.name) + '&to=' + encodeURIComponent(to), {method:'POST'});
+        }],
+        ['Delete', async () => {
+          if (confirm('Delete ' + item.name + '?'))
+            await request('/video-delete?name=' + encodeURIComponent(item.name), {method:'DELETE'});
+        }]
+      ]) {
+        const control = document.createElement('button');
+        control.textContent = label;
+        control.onclick = async () => {
+          try {
+            await action();
+            if (selectedVideo === item.name && label !== 'Copy') {
+              videoPreview.pause(); videoPreview.removeAttribute('src');
+              videoPreview.hidden = true; videoEditor.hidden = true; selectedVideo = '';
+            }
+            await refreshVideos();
+            videoStatus.textContent = label + ' complete';
+          } catch (error) { videoStatus.textContent = error.message; }
+        };
+        row.append(control);
+      }
+      videos.append(row);
+    }
+  } catch (error) { videoStatus.textContent = 'Could not list videos: ' + error.message; }
+}
+
+document.querySelector('#video-upload').onclick = async () => {
+  const selected = document.querySelector('#video-original').files[0];
+  if (!selected) return;
+  try {
+    await send(selected, selected.name, '/video-upload');
+    videoStatus.textContent = 'Uploaded ' + selected.name;
+    await refreshVideos();
+  } catch (error) { videoStatus.textContent = error.message; }
+};
+
 refresh();
+refreshVideos();
 </script>
 </html>

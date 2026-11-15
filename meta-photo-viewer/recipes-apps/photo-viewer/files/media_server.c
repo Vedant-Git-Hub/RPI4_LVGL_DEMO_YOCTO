@@ -32,6 +32,7 @@ static char photo_directory[384];
 static char video_directory[384];
 static atomic_int media_changed;
 static pthread_t server_thread;
+static struct pollfd server_listeners[2];
 static pthread_mutex_t camera_lock = PTHREAD_MUTEX_INITIALIZER;
 static uint8_t *camera_frame;
 static size_t camera_frame_size;
@@ -753,20 +754,11 @@ static void *client_main(void *argument)
 static void *server_main(void *unused)
 {
     (void)unused;
-    /* Port 80 lets users enter the .local name alone; 8080 keeps old links. */
-    struct pollfd listeners[2] = {
-        {.fd = listen_port(80), .events = POLLIN},
-        {.fd = listen_port(8080), .events = POLLIN}
-    };
-    if(listeners[0].fd < 0 && listeners[1].fd < 0) {
-        fprintf(stderr, "photo-viewer: could not listen on HTTP ports 80 or 8080\n");
-        return NULL;
-    }
     for(;;) {
-        if(poll(listeners, 2, -1) <= 0) continue;
+        if(poll(server_listeners, 2, -1) <= 0) continue;
         for(size_t i = 0; i < 2; i++) {
-            if(!(listeners[i].revents & POLLIN)) continue;
-            int fd = accept(listeners[i].fd, NULL, NULL);
+            if(!(server_listeners[i].revents & POLLIN)) continue;
+            int fd = accept(server_listeners[i].fd, NULL, NULL);
             if(fd < 0) continue;
             if(atomic_fetch_add(&active_clients, 1) >= MAX_CLIENTS) {
                 atomic_fetch_sub(&active_clients, 1);
@@ -787,7 +779,15 @@ int media_server_start(const char *directory, const char *videos)
 {
     if(snprintf(photo_directory, sizeof(photo_directory), "%s", directory) >= (int)sizeof(photo_directory)) return 0;
     if(snprintf(video_directory, sizeof(video_directory), "%s", videos) >= (int)sizeof(video_directory)) return 0;
-    if(pthread_create(&server_thread, NULL, server_main, NULL)) return 0;
+    /* Bind before reporting success so systemd can restart this service when
+     * neither HTTP port is available. */
+    server_listeners[0] = (struct pollfd){.fd = listen_port(80), .events = POLLIN};
+    server_listeners[1] = (struct pollfd){.fd = listen_port(8080), .events = POLLIN};
+    if(server_listeners[0].fd < 0 && server_listeners[1].fd < 0) return 0;
+    if(pthread_create(&server_thread, NULL, server_main, NULL)) {
+        for(int i = 0; i < 2; i++) if(server_listeners[i].fd >= 0) close(server_listeners[i].fd);
+        return 0;
+    }
     pthread_detach(server_thread);
     return 1;
 }

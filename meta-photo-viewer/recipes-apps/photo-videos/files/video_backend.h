@@ -11,6 +11,7 @@ typedef struct video_playback video_playback_t;
 int video_supported_name(const char *name);
 int video_probe_file(const char *path);
 double video_probe_duration(const char *path);
+double video_probe_frame_rate(const char *path);
 int video_render_preview(const char *path, unsigned int width, unsigned int height,
                          const image_settings_t *settings, uint8_t *pixels,
                          size_t capacity);

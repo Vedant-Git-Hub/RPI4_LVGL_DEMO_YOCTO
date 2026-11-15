@@ -105,8 +105,90 @@ double video_probe_duration(const char *path)
     return end != result && duration > 0 && duration < 86400 ? duration : 0;
 }
 
+/* The player timer should follow the source cadence rather than assuming
+ * every file is 25 fps. FFprobe reports most rates as rational numbers. */
+static int probe_stream(const char *path, char *result, size_t capacity)
+{
+    int output[2];
+    if(!path || !result || capacity < 2 || pipe(output)) return 0;
+    pid_t child = fork();
+    if(child == 0) {
+        close(output[0]);
+        dup2(output[1], STDOUT_FILENO);
+        close(output[1]);
+        int errors = open("/dev/null", O_WRONLY);
+        if(errors >= 0) { dup2(errors, STDERR_FILENO); close(errors); }
+        char *const arguments[] = {"ffprobe", "-v", "error", "-select_streams", "v:0",
+                                   "-show_entries", "stream=codec_name,avg_frame_rate",
+                                   "-of", "default=nw=1", (char *)path, NULL};
+        execv("/usr/bin/ffprobe", arguments);
+        _exit(127);
+    }
+    close(output[1]);
+    if(child < 0) { close(output[0]); return 0; }
+    size_t used = 0;
+    while(used < capacity - 1) {
+        ssize_t count = read(output[0], result + used, capacity - 1 - used);
+        if(count < 0 && errno == EINTR) continue;
+        if(count <= 0) break;
+        used += (size_t)count;
+    }
+    result[used] = '\0';
+    close(output[0]);
+    int status = 0;
+    while(waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+    return used && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+double video_probe_frame_rate(const char *path)
+{
+    char stream[160];
+    if(!probe_stream(path, stream, sizeof(stream))) return 25;
+    const char *field = strstr(stream, "avg_frame_rate=");
+    if(!field) return 25;
+    unsigned int numerator = 0, denominator = 0;
+    if(sscanf(field, "avg_frame_rate=%u/%u", &numerator, &denominator) != 2 ||
+       !denominator) return 25;
+    double rate = (double)numerator / denominator;
+    return rate >= 1 && rate <= 120 ? rate : 25;
+}
+
+/* Probe a real frame before selecting V4L2 M2M. The FFmpeg build, codec
+ * driver, and file profile all have to support it; otherwise use software. */
+static int can_decode_h264_in_hardware(const char *path, const char *filter)
+{
+    char stream[160];
+    if(access("/dev/video10", R_OK | W_OK) ||
+       !probe_stream(path, stream, sizeof(stream)) ||
+       !strstr(stream, "codec_name=h264")) return 0;
+    pid_t child = fork();
+    if(child == 0) {
+        int null = open("/dev/null", O_WRONLY);
+        if(null >= 0) { dup2(null, STDOUT_FILENO); dup2(null, STDERR_FILENO); close(null); }
+        char *const arguments[] = {"ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
+                                   "-c:v", "h264_v4l2m2m", "-i", (char *)path,
+                                   "-map", "0:v:0", "-an", "-vf", (char *)filter,
+                                   "-frames:v", "1", "-pix_fmt", "bgr24",
+                                   "-f", "rawvideo", "/dev/null", NULL};
+        execv("/usr/bin/ffmpeg", arguments);
+        _exit(127);
+    }
+    if(child < 0) return 0;
+    int status = 0;
+    struct timespec pause = {.tv_sec = 0, .tv_nsec = 100000000};
+    for(int i = 0; i < 30; i++) {
+        pid_t done = waitpid(child, &status, WNOHANG);
+        if(done == child) return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+        if(done < 0 && errno != EINTR) break;
+        nanosleep(&pause, NULL);
+    }
+    kill(child, SIGKILL);
+    while(waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+    return 0;
+}
+
 static pid_t spawn_video(const char *path, const char *filter, double start_seconds,
-                         int *read_fd)
+                         int hardware_decode, int *read_fd)
 {
     int output[2];
     if(pipe(output)) return -1;
@@ -119,10 +201,24 @@ static pid_t spawn_video(const char *path, const char *filter, double start_seco
         if(errors >= 0) { dup2(errors, STDERR_FILENO); close(errors); }
         char start[32];
         snprintf(start, sizeof(start), "%.3f", start_seconds);
-        char *const arguments[] = {"ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
-                                   "-ss", start, "-re", "-i", (char *)path, "-map", "0:v:0", "-an",
-                                   "-vf", (char *)filter, "-pix_fmt", "bgr24",
-                                   "-f", "rawvideo", "pipe:1", NULL};
+        char *arguments[26];
+        int n = 0;
+        arguments[n++] = "ffmpeg"; arguments[n++] = "-nostdin";
+        arguments[n++] = "-hide_banner"; arguments[n++] = "-loglevel";
+        arguments[n++] = "error"; arguments[n++] = "-ss";
+        arguments[n++] = start; arguments[n++] = "-re";
+        if(hardware_decode) {
+            arguments[n++] = "-c:v";
+            arguments[n++] = "h264_v4l2m2m";
+        }
+        arguments[n++] = "-i"; arguments[n++] = (char *)path;
+        arguments[n++] = "-map"; arguments[n++] = "0:v:0";
+        arguments[n++] = "-an"; arguments[n++] = "-vf";
+        arguments[n++] = (char *)filter;
+        arguments[n++] = "-vsync"; arguments[n++] = "0";
+        arguments[n++] = "-pix_fmt"; arguments[n++] = "bgr24";
+        arguments[n++] = "-f"; arguments[n++] = "rawvideo";
+        arguments[n++] = "pipe:1"; arguments[n] = NULL;
         execv("/usr/bin/ffmpeg", arguments);
         _exit(127);
     }
@@ -281,7 +377,7 @@ static int make_filter(char *output, size_t capacity, unsigned int width,
     char tail[96];
     int tail_length = snprintf(tail, sizeof(tail), finish, width, height);
     int length = snprintf(output, capacity,
-                          "fps=25,%sscale=%u:%u:force_original_aspect_ratio=%s,%s",
+                          "%sscale=%u:%u:force_original_aspect_ratio=%s,%s",
                           rotation, width, height, mode, tail);
     return tail_length > 0 && (size_t)tail_length < sizeof(tail) &&
            length > 0 && (size_t)length < capacity;
@@ -348,7 +444,11 @@ video_playback_t *video_playback_start(const char *path, unsigned int width,
     memset(player->front, 0, player->frame_size);
     pthread_mutex_init(&player->lock, NULL);
     audio_volume_apply(audio_volume_load());
-    player->video_pid = spawn_video(path, filter, start_seconds, &player->read_fd);
+    int hardware_decode = can_decode_h264_in_hardware(path, filter);
+    fprintf(stderr, "photo-viewer: video decoder %s\n",
+            hardware_decode ? "h264_v4l2m2m" : "software");
+    player->video_pid = spawn_video(path, filter, start_seconds, hardware_decode,
+                                    &player->read_fd);
     if(player->video_pid < 0) goto fail_locked;
     /* Audio is optional: video continues when the Pi has no audio output. */
     spawn_audio(path, start_seconds, player);

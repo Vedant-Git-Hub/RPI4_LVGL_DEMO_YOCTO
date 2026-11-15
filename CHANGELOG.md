@@ -1,5 +1,17 @@
 # Release history
 
+## Experimental video playback tuning — 2026-11-15
+
+- Preserve the video's source frame rate instead of converting every file to
+  25 fps. Update the LVGL frame timer to match the source rate, up to 60 fps.
+- Try the Pi 4 H.264 V4L2 decoder when its device is accessible and a test
+  frame decodes successfully. Otherwise retain FFmpeg software decoding.
+- Log which decoder was selected in the application journal.
+
+The 7-inch network image builds successfully. Playback quality and hardware
+decoder selection still need testing on the Pi. This work is isolated on
+`experimental/video-playback` and is not part of the stable-v3.0 tag.
+
 ## Stable version 3.0 — 2026-11-15
 
 - Add a four-app Home screen with separate Image Viewer, Video Player,

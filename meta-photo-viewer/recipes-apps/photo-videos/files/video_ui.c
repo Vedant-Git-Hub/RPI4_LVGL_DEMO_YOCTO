@@ -212,6 +212,11 @@ static int play_at(double start_seconds)
     image_settings_t settings;
     image_settings_load(items[selected].path, &settings);
     duration = video_probe_duration(items[selected].path);
+    double source_fps = video_probe_frame_rate(items[selected].path);
+    uint32_t timer_ms = (uint32_t)(1000.0 / source_fps + 0.5);
+    if(timer_ms < 16) timer_ms = 16;
+    if(timer_ms > 40) timer_ms = 40;
+    lv_timer_set_period(frame_timer, timer_ms);
     lv_slider_set_range(seek_slider, 0, duration > 0 ? (int)(duration + 0.5) : 100);
     if(duration > 0 && start_seconds >= duration) start_seconds = 0;
     char error[128] = {0};

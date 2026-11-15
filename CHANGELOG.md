@@ -1,46 +1,31 @@
 # Release history
 
-## Experimental video apps — 2026-11-15
+## Stable version 3.0 — 2026-11-15
 
-### Modular process architecture
+- Add a four-app Home screen with separate Image Viewer, Video Player,
+  Settings, and Camera executables. The launcher starts one LVGL child at a
+  time and returns to Home when it exits or crashes.
+- Add video browsing and full-screen playback with touch controls for Back,
+  Play/Pause, and seeking. Save per-video rotation and Fit/Fill settings.
+- Add browser video upload, playback, download, management, and saved display
+  settings. Image and video uploads have separate progress indicators. Network
+  boot deployment preserves uploaded videos and settings.
+- Send audio to a connected USB headset when available, with the Pi 4's
+  3.5 mm jack as fallback. Save volume, adjust it during playback, and accept
+  standard USB headset volume and mute key events.
+- Run the web server and USB camera owner as separate systemd services. The
+  camera app and browser use a local Unix socket to access the camera service;
+  Wi-Fi authentication continues in its own `wpa_supplicant` service.
+- Give every app and service its own recipe and `files/` directory. Shared
+  LVGL sources and build inputs live in `photo-common/`.
+- Show the welcome splash once at boot, before the launcher draws Home.
+  Opening a child app does not replay it.
 
-- Package the drawer, four LVGL apps, web server, and camera owner separately.
-  The drawer launches one child app at a time and survives an app crash.
-- Move the web server out of the UI process. Give the camera app and web server
-  a Unix socket client for a single service that owns the USB camera.
-- Share the selected image or video path through `/run/photo-viewer` so the
-  settings app can offer the corresponding saved edit controls.
-- Show the welcome splash only at boot, before the launcher appears.
-- Place each app and service recipe beside its own `files/` directory, with
-  cross-app sources in `photo-common/`. Give the splash and Wi-Fi services
-  their own recipes as well.
-
-- Add a four-app home screen for the image viewer, video player, settings, and
-  camera. Move camera and settings entry points out of the image gallery.
-- Add a video library with FFmpeg playback, optional ALSA audio, and persistent
-  per-video rotation and Fit/Fill settings.
-- Add browser video upload, playback with byte-range requests, management, and
-  saved display settings. Preserve videos across network boot deployments.
-- Include FFmpeg and ALSA playback utilities in the Yocto image.
-
-This work is isolated on `experimental/video-apps` and is not part of a
-stable release. The project owner confirmed video playback on the Pi. The
-new full-screen controls and headphone audio still need hardware validation.
-
-### Follow-up player and audio changes
-
-- Open selected videos full screen with tap-to-show Back, Play/Pause, and seek
-  controls.
-- Route video audio to the Pi 4's 3.5 mm headphone jack and save a hardware
-  mixer level from Settings → Volume.
-- Replace the large home tiles with compact icons ordered by app name.
-- Give image and video uploads separate progress and completion indicators.
-- Override the Pi 4 VC4 overlay's disabled-headphone boot parameter, load the
-  analogue sound driver, and keep ALSA errors in the service journal. Return
-  to Home when camera capture completes or the camera app exits.
-- Prefer connected USB audio devices, apply volume to PCM samples while playing,
-  and respond to standard USB headset volume and mute keys. Keep the 3.5 mm
-  jack as the fallback output.
+The project owner confirmed video playback, USB headphone audio, its volume
+slider and headset buttons, and opening the separate apps on the Pi. The
+7-inch network image passed the local Yocto build. The final boot-only splash
+change and separate camera service have not yet been confirmed on the Pi;
+the 4.3-inch and HDMI profiles also remain untested with this release.
 
 ## Stable version 2.1 — 2026-11-15
 

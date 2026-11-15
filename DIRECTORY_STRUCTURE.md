@@ -155,8 +155,7 @@ flowchart LR
     A["Pi 4 EEPROM bootloader"] --> B["Raspberry Pi firmware"]
     B --> C["Linux DSI driver creates /dev/fb0"]
     C --> D["photo-viewer-splash.service draws boot-splash.bmp"]
-    D --> E["LVGL keeps the same artwork visible"]
-    E --> F["App drawer ready"]
+    D --> E["LVGL launcher draws Home"]
 ```
 
 The 7-inch DSI screen is blank before Linux initializes its panel driver.

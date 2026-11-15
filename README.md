@@ -8,16 +8,16 @@ and Linux services for storage, Wi-Fi, DHCP, mDNS, and image decoding.
 See [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md) for an illustrated map of
 the source tree, build outputs, and files used by the running Pi.
 
-The current source release is tagged `stable-v2.1`; earlier releases remain
-available as `stable-v2.0` and `stable-v1.0`. See
+The current source release is tagged `stable-v3.0`; earlier releases remain
+available as `stable-v2.1`, `stable-v2.0`, and `stable-v1.0`. See
 [CHANGELOG.md](CHANGELOG.md) for their scope and validation. Build images are
 generated locally and are not stored in Git.
 
-## Experimental video apps
+## Apps and services in version 3.0
 
-The experimental branch now builds the app drawer, image viewer, video player,
-settings, and camera as five separate executables and Yocto packages. The
-drawer starts each app as a child process and returns to Home when it exits.
+The app drawer, image viewer, video player, settings, and camera are five
+separate executables and Yocto packages. The drawer starts each app as a child
+process and returns to Home when it exits.
 Each app and service has its own recipe and `files/` directory under
 `meta-photo-viewer/recipes-apps/`; cross-app code lives in `photo-common/`.
 The welcome splash is drawn once by the boot service; opening an app shows its
@@ -27,10 +27,9 @@ they communicate over a local Unix socket. Wi-Fi authentication continues in
 its own `wpa_supplicant` service. Image and video selections use small files
 under `/run/photo-viewer` so Settings can edit the selected item.
 
-The `experimental/video-apps` branch opens to a four-app home screen: Image
-Viewer, Video Player, Settings, and Camera. The video player browses files in
-`/opt/photo-viewer/videos`, plays their video and audio through FFmpeg/ALSA,
-and saves rotation and Fit/Fill choices for each video across reboots. The
+The home screen offers Image Viewer, Video Player, Settings, and Camera. The
+video player browses files in `/opt/photo-viewer/videos`, plays video and audio
+through FFmpeg/ALSA, and saves rotation and Fit/Fill choices across reboots. The
 original media file is unchanged. Settings contains the existing network,
 camera, and image controls plus video settings after a video is selected.
 To edit a video on the Pi, select it in Video Player, tap Home, then open
@@ -38,12 +37,13 @@ Settings → Video Settings. Save applies those choices on the next playback.
 Play Selected opens a full-screen player. Tap the video to reveal Back,
 Play/Pause, and the seek slider; controls fade while playing.
 
-The experimental image enables the Pi 4 analogue audio device and USB audio.
+The image enables the Pi 4 analogue audio device and USB audio.
 Video sound goes to a connected USB audio device when available, otherwise to
 the 3.5 mm jack. Settings → Volume applies software gain during playback and
 saves the level for later boots. USB headset volume keys also adjust and save
-the level when the headset exposes standard Linux volume key events. The home screen shows Camera, Image
-Viewer, Settings, and Video Player as compact icons in alphabetical order.
+the level when the headset exposes standard Linux volume key events. Home shows
+Camera, Image Viewer, Settings, and Video Player as compact icons in
+alphabetical order.
 The boot command line explicitly enables `snd_bcm2835` headphones because the
 VC4 display overlay can supply an earlier `enable_headphones=0` parameter.
 Camera Back and completed camera captures return to the home screen.
@@ -57,8 +57,8 @@ Image and video uploads have separate progress bars and completion messages.
 
 Build the 7-inch network image with `./build 7_display net`. Once the Pi is
 powered off, `./flash.sh net` deploys that completed build to the host's TFTP
-and NFS directories. The Pi then boots over Ethernet. This experimental
-branch's separate processes and camera IPC still need Pi hardware testing.
+and NFS directories. The Pi then boots over Ethernet. The separate camera
+service and final boot-only splash fix still need Pi hardware confirmation.
 
 ### 7-inch DSI LCD (C) profile
 
@@ -94,8 +94,9 @@ panel.
 The startup screen shows **Welcome to Vedant's Photo Gallary!** and
 **Loading please wait...** in large, bold yellow text. The
 `photo-viewer-splash` service paints it directly to `/dev/fb0` as soon as the
-Linux display driver exposes the framebuffer. LVGL shows the same artwork
-while building the gallery, then removes it when the main screen is ready.
+Linux display driver exposes the framebuffer. The artwork remains visible
+until the LVGL launcher paints Home; child apps open directly to their own
+screens.
 The Pi 4 boots through its onboard EEPROM bootloader, Raspberry Pi firmware,
 and then Linux; this image does not use U-Boot. The 7-inch DSI panel is
 initialized by the Linux driver, so it stays blank during the earlier firmware

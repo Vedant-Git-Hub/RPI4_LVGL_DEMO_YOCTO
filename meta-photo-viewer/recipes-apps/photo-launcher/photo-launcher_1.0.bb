@@ -1,0 +1,3 @@
+SUMMARY = "LVGL app drawer and child process supervisor"
+require recipes-apps/photo-common/photo-app-common.inc
+RDEPENDS:${PN} = "photo-images photo-videos photo-settings photo-camera"

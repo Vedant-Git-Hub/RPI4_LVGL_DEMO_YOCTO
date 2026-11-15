@@ -1,5 +1,32 @@
 # Release history
 
+## Stable version 3.0 — 2026-11-15
+
+- Add a four-app Home screen with separate Image Viewer, Video Player,
+  Settings, and Camera executables. The launcher starts one LVGL child at a
+  time and returns to Home when it exits or crashes.
+- Add video browsing and full-screen playback with touch controls for Back,
+  Play/Pause, and seeking. Save per-video rotation and Fit/Fill settings.
+- Add browser video upload, playback, download, management, and saved display
+  settings. Image and video uploads have separate progress indicators. Network
+  boot deployment preserves uploaded videos and settings.
+- Send audio to a connected USB headset when available, with the Pi 4's
+  3.5 mm jack as fallback. Save volume, adjust it during playback, and accept
+  standard USB headset volume and mute key events.
+- Run the web server and USB camera owner as separate systemd services. The
+  camera app and browser use a local Unix socket to access the camera service;
+  Wi-Fi authentication continues in its own `wpa_supplicant` service.
+- Give every app and service its own recipe and `files/` directory. Shared
+  LVGL sources and build inputs live in `photo-common/`.
+- Show the welcome splash once at boot, before the launcher draws Home.
+  Opening a child app does not replay it.
+
+The project owner confirmed video playback, USB headphone audio, its volume
+slider and headset buttons, and opening the separate apps on the Pi. The
+7-inch network image passed the local Yocto build. The final boot-only splash
+change and separate camera service have not yet been confirmed on the Pi;
+the 4.3-inch and HDMI profiles also remain untested with this release.
+
 ## Stable version 2.1 — 2026-11-15
 
 - Merge network boot into the main branch. Add dedicated direct-Ethernet

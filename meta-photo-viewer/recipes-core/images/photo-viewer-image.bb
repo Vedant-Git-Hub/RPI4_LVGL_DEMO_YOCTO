@@ -6,9 +6,20 @@ require recipes-core/images/core-image-base.bb
 IMAGE_INSTALL:append = " \
     fbset \
     photo-viewer \
+    photo-launcher \
+    photo-images \
+    photo-videos \
+    photo-settings \
+    photo-camera \
+    photo-web \
+    photo-camera-service \
+    photo-splash \
+    photo-wifi \
     iw \
     wpa-supplicant \
     avahi-daemon \
+    ffmpeg \
+    alsa-utils-aplay \
 "
 
 # Network builds need the firmware/kernel deploy output even though they do

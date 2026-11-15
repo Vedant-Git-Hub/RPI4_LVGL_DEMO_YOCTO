@@ -2,6 +2,7 @@
 #include "camera_backend.h"
 #include "image_convert.h"
 #include "image_settings.h"
+#include "video_backend.h"
 
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -23,12 +24,15 @@
 #include <unistd.h>
 
 #define MAX_UPLOAD (64 * 1024 * 1024)
+#define MAX_VIDEO_UPLOAD ((size_t)2 * 1024 * 1024 * 1024)
 #define REQUEST_SIZE 8192
 #define PAGE_PATH "/usr/share/photo-viewer/index.html"
 
 static char photo_directory[384];
+static char video_directory[384];
 static atomic_int media_changed;
 static pthread_t server_thread;
+static struct pollfd server_listeners[2];
 static pthread_mutex_t camera_lock = PTHREAD_MUTEX_INITIALIZER;
 static uint8_t *camera_frame;
 static size_t camera_frame_size;
@@ -289,10 +293,11 @@ static void serve_page(int fd)
     free(content);
 }
 
-static int safe_name(const char *name)
+static int safe_name(const char *name, int video)
 {
     size_t length = strlen(name);
-    if(length < 5 || length > 120 || !image_supported_name(name)) return 0;
+    if(length < (video ? 4u : 5u) || length > 120 ||
+       !(video ? video_supported_name(name) : image_supported_name(name))) return 0;
     if(name[0] == '.' || strstr(name, "..")) return 0;
     for(size_t i = 0; i < length; i++) {
         unsigned char c = (unsigned char)name[i];
@@ -301,7 +306,8 @@ static int safe_name(const char *name)
     return 1;
 }
 
-static int decode_name(const char *target, const char *key, char *name, size_t capacity)
+static int decode_name(const char *target, const char *key, char *name,
+                       size_t capacity, int video)
 {
     const char *query = strchr(target, '?');
     if(!query) return 0;
@@ -332,19 +338,25 @@ static int decode_name(const char *target, const char *key, char *name, size_t c
         name[used++] = (char)c;
     }
     name[used] = '\0';
-    return safe_name(name);
+    return safe_name(name, video);
+}
+
+static int media_path(const char *name, char *path, size_t capacity, int video)
+{
+    int length = snprintf(path, capacity, "%s/%s",
+                          video ? video_directory : photo_directory, name);
+    return length > 0 && (size_t)length < capacity;
 }
 
 static int file_path(const char *name, char *path, size_t capacity)
 {
-    int length = snprintf(path, capacity, "%s/%s", photo_directory, name);
-    return length > 0 && (size_t)length < capacity;
+    return media_path(name, path, capacity, 0);
 }
 
-static void list_files(int fd)
+static void list_files(int fd, int video)
 {
-    DIR *dir = opendir(photo_directory);
-    if(!dir) { error_reply(fd, 500, "Internal Server Error", "photo folder unavailable"); return; }
+    DIR *dir = opendir(video ? video_directory : photo_directory);
+    if(!dir) { error_reply(fd, 500, "Internal Server Error", "media folder unavailable"); return; }
     char json[16384];
     size_t used = 0;
     json[used++] = '[';
@@ -352,7 +364,8 @@ static void list_files(int fd)
     while((entry = readdir(dir))) {
         char path[512];
         struct stat st;
-        if(!safe_name(entry->d_name) || !file_path(entry->d_name, path, sizeof(path)) ||
+        if(!safe_name(entry->d_name, video) ||
+           !media_path(entry->d_name, path, sizeof(path), video) ||
            lstat(path, &st) || !S_ISREG(st.st_mode)) continue;
         /* Filenames accepted by safe_name contain no JSON control characters or quotes. */
         int length = snprintf(json + used, sizeof(json) - used, "%s{\"name\":\"%s\",\"size\":%lld}",
@@ -387,10 +400,116 @@ static void download_file(int fd, const char *path)
     fclose(stream);
 }
 
-static void upload_file(int fd, const char *path, const char *body, size_t buffered,
-                        size_t content_length)
+static void stream_video(int fd, const char *path, const char *request, const char *body)
 {
-    if(content_length < 1 || content_length > MAX_UPLOAD || buffered > content_length) {
+    int input = open(path, O_RDONLY | O_NOFOLLOW);
+    struct stat info;
+    if(input < 0 || fstat(input, &info) || !S_ISREG(info.st_mode)) {
+        if(input >= 0) close(input);
+        error_reply(fd, 404, "Not Found", "video not found");
+        return;
+    }
+    off_t start = 0, end = info.st_size - 1;
+    int partial = 0;
+    const char *line = strstr(request, "\r\n");
+    while(line && line < body) {
+        line += 2;
+        if(!strncasecmp(line, "Range: bytes=", 13)) {
+            char *after;
+            errno = 0;
+            unsigned long long first = strtoull(line + 13, &after, 10);
+            if(errno || after == line + 13 || (*after != '-' && *after != '\r')) {
+                close(input); error_reply(fd, 416, "Range Not Satisfiable", "invalid range"); return;
+            }
+            start = (off_t)first;
+            if(*after == '-' && isdigit((unsigned char)after[1])) {
+                unsigned long long last = strtoull(after + 1, &after, 10);
+                if(last < (unsigned long long)end) end = (off_t)last;
+            }
+            partial = 1;
+            break;
+        }
+        line = strstr(line, "\r\n");
+    }
+    if(start < 0 || start >= info.st_size || end < start) {
+        close(input); error_reply(fd, 416, "Range Not Satisfiable", "invalid range"); return;
+    }
+    const char *ext = strrchr(path, '.');
+    const char *type = ext && !strcasecmp(ext, ".webm") ? "video/webm" :
+                       ext && !strcasecmp(ext, ".mkv") ? "video/x-matroska" :
+                       ext && !strcasecmp(ext, ".mov") ? "video/quicktime" :
+                       ext && !strcasecmp(ext, ".avi") ? "video/x-msvideo" :
+                       ext && (!strcasecmp(ext, ".mpeg") || !strcasecmp(ext, ".mpg")) ? "video/mpeg" :
+                       ext && !strcasecmp(ext, ".ts") ? "video/mp2t" :
+                       ext && !strcasecmp(ext, ".3gp") ? "video/3gpp" :
+                       ext && !strcasecmp(ext, ".wmv") ? "video/x-ms-wmv" :
+                       ext && !strcasecmp(ext, ".flv") ? "video/x-flv" : "video/mp4";
+    char header[512];
+    int size;
+    if(partial) {
+        size = snprintf(header, sizeof(header),
+            "HTTP/1.1 206 Partial Content\r\nContent-Type: %s\r\nAccept-Ranges: bytes\r\n"
+            "Content-Length: %lld\r\nContent-Range: bytes %lld-%lld/%lld\r\n"
+            "Connection: close\r\n\r\n", type, (long long)(end - start + 1),
+            (long long)start, (long long)end, (long long)info.st_size);
+    } else size = snprintf(header, sizeof(header),
+        "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nAccept-Ranges: bytes\r\n"
+        "Content-Length: %lld\r\nConnection: close\r\n\r\n",
+        type, (long long)info.st_size);
+    if(size <= 0 || (size_t)size >= sizeof(header) || !send_all(fd, header, (size_t)size)) {
+        close(input); return;
+    }
+    if(lseek(input, start, SEEK_SET) >= 0) {
+        char buffer[65536];
+        off_t left = end - start + 1;
+        while(left > 0) {
+            size_t wanted = left < (off_t)sizeof(buffer) ? (size_t)left : sizeof(buffer);
+            ssize_t got = read(input, buffer, wanted);
+            if(got <= 0 || !send_all(fd, buffer, (size_t)got)) break;
+            left -= got;
+        }
+    }
+    close(input);
+}
+
+static void video_settings_api(int fd, const char *method, const char *target)
+{
+    char name[128], path[512], json[128];
+    if(!decode_name(target, "name", name, sizeof(name), 1) ||
+       !media_path(name, path, sizeof(path), 1)) {
+        error_reply(fd, 400, "Bad Request", "invalid video name"); return;
+    }
+    struct stat info;
+    if(lstat(path, &info) || !S_ISREG(info.st_mode)) {
+        error_reply(fd, 404, "Not Found", "video not found"); return;
+    }
+    image_settings_t settings;
+    image_settings_load(path, &settings);
+    if(!strcmp(method, "POST")) {
+        const char *angle = strstr(target, "&rotation=");
+        const char *mode = strstr(target, "&mode=");
+        unsigned int rotation;
+        if(!angle || !mode || sscanf(angle + 10, "%u", &rotation) != 1 ||
+           rotation > 270 || rotation % 90 ||
+           (strncmp(mode + 6, "fit", 3) && strncmp(mode + 6, "fill", 4))) {
+            error_reply(fd, 400, "Bad Request", "invalid video settings"); return;
+        }
+        settings.rotation = rotation;
+        settings.mode = !strncmp(mode + 6, "fill", 4) ? IMAGE_FILL_DISPLAY : IMAGE_FIT_WHOLE;
+        if(!image_settings_save(path, &settings)) {
+            error_reply(fd, 500, "Internal Server Error", "could not save video settings"); return;
+        }
+    }
+    int size = snprintf(json, sizeof(json), "{\"rotation\":%u,\"mode\":\"%s\"}",
+                        settings.rotation, settings.mode == IMAGE_FILL_DISPLAY ? "fill" : "fit");
+    reply(fd, 200, "OK", "application/json", json, (size_t)size);
+}
+
+static void upload_file(int fd, const char *path, const char *body, size_t buffered,
+                        size_t content_length, int video)
+{
+    if(content_length < 1 || content_length > (video ? MAX_VIDEO_UPLOAD : MAX_UPLOAD) ||
+       buffered > content_length) {
         error_reply(fd, 400, "Bad Request", "invalid upload size");
         return;
     }
@@ -416,14 +535,15 @@ static void upload_file(int fd, const char *path, const char *body, size_t buffe
     }
     if(ok) ok = fflush(stream) == 0;
     if(fclose(stream)) ok = 0;
-    if(ok) {
+    if(ok && !video) {
         char converted[128];
         ok = image_convert_to_bmp(temporary, path, converted, sizeof(converted));
         if(ok) unlink(converted);
     }
+    if(ok && video) ok = video_probe_file(temporary);
     if(!ok) {
         unlink(temporary);
-        error_reply(fd, 400, "Bad Request", "upload failed or image format unsupported");
+        error_reply(fd, 400, "Bad Request", "upload failed or media format unsupported");
         return;
     }
     if(rename(temporary, path)) {
@@ -435,13 +555,13 @@ static void upload_file(int fd, const char *path, const char *body, size_t buffe
     error_reply(fd, 200, "OK", "uploaded");
 }
 
-static void move_or_copy(int fd, const char *target, int copy)
+static void move_or_copy(int fd, const char *target, int copy, int video)
 {
     char from[128], to[128], source[512], destination[512];
-    if(!decode_name(target, "from", from, sizeof(from)) ||
-       !decode_name(target, "to", to, sizeof(to)) ||
-       !file_path(from, source, sizeof(source)) ||
-       !file_path(to, destination, sizeof(destination))) {
+    if(!decode_name(target, "from", from, sizeof(from), video) ||
+       !decode_name(target, "to", to, sizeof(to), video) ||
+       !media_path(from, source, sizeof(source), video) ||
+       !media_path(to, destination, sizeof(destination), video)) {
         error_reply(fd, 400, "Bad Request", "invalid file name");
         return;
     }
@@ -520,7 +640,12 @@ static void serve_client(int fd)
     if(!strcmp(method, "GET") && !strcmp(target, "/")) {
         serve_page(fd); return;
     }
-    if(!strcmp(method, "GET") && !strcmp(target, "/api/files")) { list_files(fd); return; }
+    if(!strcmp(method, "GET") && !strcmp(target, "/api/files")) { list_files(fd, 0); return; }
+    if(!strcmp(method, "GET") && !strcmp(target, "/api/videos")) { list_files(fd, 1); return; }
+    if((!strcmp(method, "GET") || !strcmp(method, "POST")) &&
+       !strncmp(target, "/video-settings?", 16)) {
+        video_settings_api(fd, method, target); return;
+    }
     if(!strcmp(method, "GET") && !strcmp(target, "/api/camera/status")) { camera_status(fd); return; }
     if(!strcmp(method, "GET") && !strcmp(target, "/api/camera/settings")) { list_camera_modes(fd); return; }
     if(!strcmp(method, "POST") && !strncmp(target, "/api/camera/settings?", 21)) {
@@ -531,19 +656,32 @@ static void serve_client(int fd)
         !strncmp(target, "/api/camera/stream?", 19))) { stream_camera(fd); return; }
     if(!strcmp(method, "POST") && !strcmp(target, "/api/camera/capture")) { capture_camera(fd); return; }
     if(!strcmp(method, "POST") && !strncmp(target, "/copy?", 6)) {
-        move_or_copy(fd, target, 1); return;
+        move_or_copy(fd, target, 1, 0); return;
     }
     if(!strcmp(method, "POST") && !strncmp(target, "/rename?", 8)) {
-        move_or_copy(fd, target, 0); return;
+        move_or_copy(fd, target, 0, 0); return;
     }
+    if(!strcmp(method, "POST") && !strncmp(target, "/video-copy?", 12)) {
+        move_or_copy(fd, target, 1, 1); return;
+    }
+    if(!strcmp(method, "POST") && !strncmp(target, "/video-rename?", 14)) {
+        move_or_copy(fd, target, 0, 1); return;
+    }
+    int video = !strncmp(target, "/video-", 7);
     int upload = !strcmp(method, "PUT") && !strncmp(target, "/upload?", 8);
     int remove_file = !strcmp(method, "DELETE") && !strncmp(target, "/delete?", 8);
     int download = !strcmp(method, "GET") && !strncmp(target, "/file?", 6);
+    if(video) {
+        upload = !strcmp(method, "PUT") && !strncmp(target, "/video-upload?", 14);
+        remove_file = !strcmp(method, "DELETE") && !strncmp(target, "/video-delete?", 14);
+        download = !strcmp(method, "GET") && !strncmp(target, "/video-file?", 12);
+    }
     if(!upload && !remove_file && !download) {
         error_reply(fd, 404, "Not Found", "not found"); return;
     }
     char name[128], path[512];
-    if(!decode_name(target, "name", name, sizeof(name)) || !file_path(name, path, sizeof(path))) {
+    if(!decode_name(target, "name", name, sizeof(name), video) ||
+       !media_path(name, path, sizeof(path), video)) {
         error_reply(fd, 400, "Bad Request", "invalid file name"); return;
     }
     if(remove_file) {
@@ -555,7 +693,11 @@ static void serve_client(int fd)
         else error_reply(fd, 404, "Not Found", "file not found");
         return;
     }
-    if(download) { download_file(fd, path); return; }
+    if(download) {
+        if(video) stream_video(fd, path, request, body);
+        else download_file(fd, path);
+        return;
+    }
     size_t content_length = 0;
     int found_length = 0;
     char *line = strstr(request, "\r\n");
@@ -565,7 +707,8 @@ static void serve_client(int fd)
             char *end;
             errno = 0;
             unsigned long parsed = strtoul(line + 15, &end, 10);
-            if(errno || end == line + 15 || (*end != '\r' && *end != ' ') || parsed > MAX_UPLOAD) {
+            if(errno || end == line + 15 || (*end != '\r' && *end != ' ') ||
+               parsed > (video ? MAX_VIDEO_UPLOAD : MAX_UPLOAD)) {
                 error_reply(fd, 400, "Bad Request", "invalid content length"); return;
             }
             content_length = (size_t)parsed;
@@ -575,7 +718,7 @@ static void serve_client(int fd)
     }
     if(!found_length) { error_reply(fd, 411, "Length Required", "content length required"); return; }
     body += 4;
-    upload_file(fd, path, body, used - (size_t)(body - request), content_length);
+    upload_file(fd, path, body, used - (size_t)(body - request), content_length, video);
 }
 
 static int listen_port(unsigned int port)
@@ -611,20 +754,11 @@ static void *client_main(void *argument)
 static void *server_main(void *unused)
 {
     (void)unused;
-    /* Port 80 lets users enter the .local name alone; 8080 keeps old links. */
-    struct pollfd listeners[2] = {
-        {.fd = listen_port(80), .events = POLLIN},
-        {.fd = listen_port(8080), .events = POLLIN}
-    };
-    if(listeners[0].fd < 0 && listeners[1].fd < 0) {
-        fprintf(stderr, "photo-viewer: could not listen on HTTP ports 80 or 8080\n");
-        return NULL;
-    }
     for(;;) {
-        if(poll(listeners, 2, -1) <= 0) continue;
+        if(poll(server_listeners, 2, -1) <= 0) continue;
         for(size_t i = 0; i < 2; i++) {
-            if(!(listeners[i].revents & POLLIN)) continue;
-            int fd = accept(listeners[i].fd, NULL, NULL);
+            if(!(server_listeners[i].revents & POLLIN)) continue;
+            int fd = accept(server_listeners[i].fd, NULL, NULL);
             if(fd < 0) continue;
             if(atomic_fetch_add(&active_clients, 1) >= MAX_CLIENTS) {
                 atomic_fetch_sub(&active_clients, 1);
@@ -641,10 +775,19 @@ static void *server_main(void *unused)
     }
 }
 
-int media_server_start(const char *directory)
+int media_server_start(const char *directory, const char *videos)
 {
     if(snprintf(photo_directory, sizeof(photo_directory), "%s", directory) >= (int)sizeof(photo_directory)) return 0;
-    if(pthread_create(&server_thread, NULL, server_main, NULL)) return 0;
+    if(snprintf(video_directory, sizeof(video_directory), "%s", videos) >= (int)sizeof(video_directory)) return 0;
+    /* Bind before reporting success so systemd can restart this service when
+     * neither HTTP port is available. */
+    server_listeners[0] = (struct pollfd){.fd = listen_port(80), .events = POLLIN};
+    server_listeners[1] = (struct pollfd){.fd = listen_port(8080), .events = POLLIN};
+    if(server_listeners[0].fd < 0 && server_listeners[1].fd < 0) return 0;
+    if(pthread_create(&server_thread, NULL, server_main, NULL)) {
+        for(int i = 0; i < 2; i++) if(server_listeners[i].fd >= 0) close(server_listeners[i].fd);
+        return 0;
+    }
     pthread_detach(server_thread);
     return 1;
 }

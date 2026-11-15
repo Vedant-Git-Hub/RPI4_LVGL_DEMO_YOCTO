@@ -39,9 +39,18 @@ photo_viewer/
 │   └── rpi4-photo-viewer-hdmi-net.yml
 ├── meta-photo-viewer/            Custom Yocto layer
 │   ├── conf/layer.conf           Register this layer with BitBake
-│   ├── recipes-apps/photo-viewer/
-│   │   ├── photo-viewer_2.1.bb   Build/install the gallery application
-│   │   └── files/               C sources, web page, service files
+│   ├── recipes-apps/
+│   │   ├── photo-common/         Shared LVGL shell, layout, build inputs
+│   │   ├── photo-launcher/       App drawer recipe and source
+│   │   ├── photo-images/         Image recipe and image support files
+│   │   ├── photo-videos/         Video recipe and player files
+│   │   ├── photo-settings/       Settings recipe and network/audio files
+│   │   ├── photo-camera/         Camera app recipe and UI files
+│   │   ├── photo-camera-service/ Camera service recipe and IPC files
+│   │   ├── photo-web/            Web service recipe, HTML, HTTP server
+│   │   ├── photo-splash/         One-time boot splash recipe and artwork
+│   │   ├── photo-wifi/           Wi-Fi service recipe and configuration
+│   │   └── photo-viewer/         Launcher integration and panel setup
 │   ├── recipes-core/images/
 │   │   └── photo-viewer-image.bb Define packages in the Pi root filesystem
 │   ├── recipes-graphics/lvgl/    LVGL recipe additions and patches
@@ -74,30 +83,44 @@ the root filesystem archive and matching TFTP boot files.
 
 ## Application files inside the Yocto layer
 
-```text
-meta-photo-viewer/recipes-apps/photo-viewer/files/
-├── main.c                         LVGL screens, gallery, input handling
-├── display_layout.h               Display-dependent sizes and layout values
-├── camera_backend.c/.h            Video4Linux2 camera capture
-├── camera_ui.c/.h                 Camera screen and capture controls
-├── image_convert.c/.h            Decode and prepare images for display
-├── image_settings.c/.h           Saved per-image rotation and Fit/Fill
-├── media_server.c/.h             HTTP photo manager and live camera API
-├── index.html                    Browser interface
-├── boot_splash.c                 Paint the startup artwork to /dev/fb0
-├── boot-splash.bmp               Bold yellow welcome message
-├── wifi_control.c/.h             Wi-Fi scan and connection control
-├── hostname_settings.c/.h        Editable local hostname
-├── photo-viewer.service          Start the gallery after framebuffer setup
-├── photo-viewer-splash.service   Show artwork before the gallery starts
-├── photo-viewer-wifi.service     Start Wi-Fi authentication
-├── photo-viewer-wpa.conf         Initial Wi-Fi configuration
-├── 20-photo-viewer-wlan.network  WLAN DHCP configuration
-├── panel-simple.conf            4.3-inch panel module loading
-└── Makefile                     Compile the application for the Pi
+```mermaid
+flowchart LR
+    L["photo-launcher<br/>systemd starts at boot"] --> I["photo-images"]
+    L --> V["photo-videos"]
+    L --> S["photo-settings"]
+    L --> C["photo-camera"]
+    C -->|Unix socket| D["photo-camera-service"]
+    W["photo-web<br/>systemd service"] -->|Unix socket| D
+    S -->|wpa_cli| N["wpa_supplicant<br/>systemd service"]
+    I -.->|selected path in /run| S
+    V -.->|selected path in /run| S
 ```
 
-The `.bb` recipe installs these files into the Pi image; editing `files/`
+Only one LVGL child owns the touchscreen and framebuffer at a time. The
+launcher waits for that child to exit, then redraws Home. The camera service
+opens the USB device on demand and serializes clients; it does not keep the
+camera streaming while no client needs it.
+
+Each app or service directory contains its own `.bb` recipe and `files/`
+directory. `photo-common/` holds the sources currently compiled into multiple
+LVGL app binaries. The image and settings screens still share `main.c`; their
+image, network, and audio helpers live in their named directories.
+
+| Directory | Main files |
+| --- | --- |
+| `photo-common/` | `main.c`, `display_layout.h`, `selection_state.c`, shared `Makefile`, `photo-app-common.inc` |
+| `photo-launcher/` | `launcher.c` |
+| `photo-images/` | `image_convert.c`, `image_settings.c` |
+| `photo-videos/` | `video_ui.c`, `video_backend.c` |
+| `photo-settings/` | `wifi_control.c`, `hostname_settings.c`, `audio_control.c` |
+| `photo-camera/` | `camera_ui.c` |
+| `photo-camera-service/` | `camera_service.c`, V4L2 backend, camera IPC client and protocol, service unit |
+| `photo-web/` | `media_server.c`, `web_server_main.c`, `index.html`, service unit |
+| `photo-splash/` | `boot_splash.c`, welcome artwork, boot service unit |
+| `photo-wifi/` | `wpa_supplicant` service unit, initial configuration, DHCP network file |
+| `photo-viewer/` | Launcher service unit and panel configuration |
+
+The `.bb` recipes install these files into the Pi image; editing `files/`
 alone does not update an already deployed Pi. Rebuild and redeploy the image
 to apply application changes.
 
@@ -114,13 +137,15 @@ and should not be confused with the source files above.
 | `/srv/photo-viewer-netboot/tftp/` on the host | Pi firmware, kernel, command line, and display overlays served by TFTP. |
 | `/srv/photo-viewer-netboot/rootfs/` on the host | Pi root filesystem exported over NFS. |
 | `/opt/photo-viewer/photos/` on the Pi | Gallery photos; network boot stores them in the host NFS root. |
+| `/opt/photo-viewer/videos/` on the Pi | Uploaded videos and saved per-video display settings. |
+| `/opt/photo-viewer/volume.conf` on the Pi | Saved headphone volume, preserved by network deployment. |
 | `/opt/photo-viewer/camera.conf` on the Pi | Camera mode shared by the Pi screen and web controls. |
 | `/etc/photo-viewer-wpa.conf` on the Pi | Saved Wi-Fi profiles. |
 
 The `netboot/setup-host.sh` script installs the host service configuration
 under `/etc/photo-viewer-netboot/`, `/etc/exports.d/`, and systemd. The
 `netboot/deploy.sh` script replaces the host TFTP and NFS directories while
-preserving gallery photos and saved device settings. Keep the host running
+preserving gallery photos, videos, and saved device settings. Keep the host running
 while the Pi uses network boot.
 
 ## Boot display handoff
@@ -130,14 +155,13 @@ flowchart LR
     A["Pi 4 EEPROM bootloader"] --> B["Raspberry Pi firmware"]
     B --> C["Linux DSI driver creates /dev/fb0"]
     C --> D["photo-viewer-splash.service draws boot-splash.bmp"]
-    D --> E["LVGL keeps the same artwork visible"]
-    E --> F["Gallery ready"]
+    D --> E["LVGL launcher draws Home"]
 ```
 
 The 7-inch DSI screen is blank before Linux initializes its panel driver.
 This image boots the kernel directly through Raspberry Pi firmware; U-Boot is
 not in the boot chain. The splash service runs when the framebuffer appears,
-then the LVGL app keeps the same message visible until its screens are built.
+then the LVGL launcher draws its home screen.
 
 The repository ignores `.kas-work/`, downloaded layers, build artifacts, and
 the downloaded `kas-container` wrapper. A fresh checkout regenerates them on

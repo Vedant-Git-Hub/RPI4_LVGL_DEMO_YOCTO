@@ -41,7 +41,8 @@ fi
 mkdir "$stage/rootfs"
 tar --numeric-owner -C "$stage/rootfs" -xjf "$stage/rootfs.tar.bz2"
 # Gallery content and device settings survive an image redeployment.
-for path in opt/photo-viewer/photos opt/photo-viewer/camera.conf \
+for path in opt/photo-viewer/photos opt/photo-viewer/videos opt/photo-viewer/camera.conf \
+    opt/photo-viewer/volume.conf \
     etc/photo-viewer-wpa.conf etc/hostname \
     etc/systemd/system/photo-viewer-boot-diagnostics.service \
     etc/systemd/system/basic.target.wants/photo-viewer-boot-diagnostics.service \

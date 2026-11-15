@@ -1164,17 +1164,20 @@ int main(void)
     int sdl_display = 0;
     lv_init();
 #if defined(PHOTO_APP_VIDEO) && LV_USE_SDL
-    /* KMSDRM presents full-screen LVGL buffers through an accelerated GLES
-     * renderer. The existing fbdev path remains available on unsupported
-     * displays or when another process temporarily owns DRM master. */
-    setenv("SDL_VIDEODRIVER", "kmsdrm", 1);
-    setenv("SDL_RENDER_DRIVER", "opengles2", 1);
-    display = lv_sdl_window_create(PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
-    if(display) {
-        sdl_display = 1;
-        fprintf(stderr, "photo-viewer: video display SDL KMSDRM\n");
+    /* On the 7-inch DSI panel KMSDRM can open an accelerated renderer yet
+     * leave the panel black. Keep the proven framebuffer path as the default
+     * until that presentation issue is resolved on hardware. */
+    display = NULL;
+    if(getenv("PHOTO_VIDEO_SDL") && !strcmp(getenv("PHOTO_VIDEO_SDL"), "1")) {
+        setenv("SDL_VIDEODRIVER", "kmsdrm", 1);
+        setenv("SDL_RENDER_DRIVER", "opengles2", 1);
+        display = lv_sdl_window_create(PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
+        if(display) {
+            sdl_display = 1;
+            fprintf(stderr, "photo-viewer: video display SDL KMSDRM\n");
+        }
+        else fprintf(stderr, "photo-viewer: video display falling back to fbdev\n");
     }
-    else fprintf(stderr, "photo-viewer: video display falling back to fbdev\n");
 #else
     display = NULL;
 #endif

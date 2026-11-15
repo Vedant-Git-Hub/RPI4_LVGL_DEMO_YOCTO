@@ -10,6 +10,9 @@
 - Link SDL directly into the shared LVGL library. Without this dependency,
   `photo-launcher` exits with an unresolved `SDL_GetTicks` symbol and the boot
   splash stays on screen.
+- Restore framebuffer presentation as the Video Player default after the
+  accelerated KMSDRM renderer opened on the 7-inch DSI panel but left it black.
+  Set `PHOTO_VIDEO_SDL=1` to retry the experimental GPU path during debugging.
 - Preserve the video's source frame rate instead of converting every file to
   25 fps. Update the LVGL frame timer to match the source rate, up to 60 fps.
 - Try the Pi 4 H.264 V4L2 decoder when its device is accessible and a test

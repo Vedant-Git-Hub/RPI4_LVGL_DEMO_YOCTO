@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<launchConfiguration type="org.eclipse.ui.externaltools.ProgramLaunchConfigurationType">
+  <stringAttribute key="org.eclipse.ui.externaltools.ATTR_LOCATION" value="${project_loc:RPI4_LVGL_DEMO_YOCTO}/run-task.sh" />
+  <stringAttribute key="org.eclipse.ui.externaltools.ATTR_TOOL_ARGUMENTS" value="build hdmi_display usb" />
+  <stringAttribute key="org.eclipse.ui.externaltools.ATTR_WORKING_DIRECTORY" value="${project_loc:RPI4_LVGL_DEMO_YOCTO}" />
+  <booleanAttribute key="org.eclipse.debug.core.ATTR_CAPTURE_OUTPUT" value="true" />
+</launchConfiguration>

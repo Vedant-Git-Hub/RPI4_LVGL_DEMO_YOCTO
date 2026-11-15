@@ -27,6 +27,7 @@ photo_viewer/
 ├── LICENSE                       Project license
 ├── build                         Select display/medium and create an image
 ├── flash.sh                      Deploy the last successful build
+├── eclipse/                      Eclipse C project and build/flash launchers
 ├── kas/                          Build profiles (see matrix below)
 │   ├── rpi4-photo-viewer.yml     Base 4.3-inch DSI, USB profile
 │   ├── rpi4-photo-viewer-sd.yml  4.3-inch DSI, SD profile

@@ -7,6 +7,8 @@ and Linux services for storage, Wi-Fi, DHCP, mDNS, and image decoding.
 
 See [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md) for an illustrated map of
 the source tree, build outputs, and files used by the running Pi.
+For viewing the sources and running build/flash commands from Eclipse, see
+[eclipse/README.md](eclipse/README.md).
 
 The current source release is tagged `stable-v3.0`; earlier releases remain
 available as `stable-v2.1`, `stable-v2.0`, and `stable-v1.0`. See

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+  <name>RPI4_LVGL_DEMO_YOCTO</name>
+  <comment>Raspberry Pi 4 LVGL gallery Yocto sources and build launchers</comment>
+  <projects></projects>
+  <buildSpec></buildSpec>
+  <natures>
+    <nature>org.eclipse.cdt.core.cnature</nature>
+  </natures>
+  <linkedResources>
+    <link><name>meta-photo-viewer</name><type>2</type><locationURI>PARENT-1-PROJECT_LOC/meta-photo-viewer</locationURI></link>
+    <link><name>kas</name><type>2</type><locationURI>PARENT-1-PROJECT_LOC/kas</locationURI></link>
+    <link><name>netboot</name><type>2</type><locationURI>PARENT-1-PROJECT_LOC/netboot</locationURI></link>
+    <link><name>build</name><type>1</type><locationURI>PARENT-1-PROJECT_LOC/build</locationURI></link>
+    <link><name>flash.sh</name><type>1</type><locationURI>PARENT-1-PROJECT_LOC/flash.sh</locationURI></link>
+    <link><name>README.md</name><type>1</type><locationURI>PARENT-1-PROJECT_LOC/README.md</locationURI></link>
+    <link><name>DIRECTORY_STRUCTURE.md</name><type>1</type><locationURI>PARENT-1-PROJECT_LOC/DIRECTORY_STRUCTURE.md</locationURI></link>
+  </linkedResources>
+</projectDescription>

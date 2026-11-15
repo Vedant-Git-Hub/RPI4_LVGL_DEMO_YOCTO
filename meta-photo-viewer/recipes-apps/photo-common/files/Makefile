@@ -1,6 +1,7 @@
 CPPFLAGS += $(shell pkg-config --cflags lvgl)
 CPPFLAGS += $(if $(filter 1,$(PHOTO_VIEWER_7INCH)),-DPHOTO_VIEWER_7INCH,)
 LDLIBS += $(shell pkg-config --libs lvgl) -ljpeg -lm
+LDLIBS += $(shell pkg-config --libs sdl2)
 
 APP_SOURCES = main.c camera_ui.c camera_catalog.c camera_ipc_client.c video_ui.c video_backend.c \
     image_convert.c image_settings.c wifi_control.c hostname_settings.c \

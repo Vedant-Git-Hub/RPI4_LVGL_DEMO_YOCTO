@@ -14,6 +14,9 @@
 
 #include <lvgl/lvgl.h>
 #include <lvgl/src/drivers/evdev/lv_evdev.h>
+#if defined(PHOTO_APP_VIDEO) && LV_USE_SDL
+#include <lvgl/src/drivers/sdl/lv_sdl_window.h>
+#endif
 
 #include "image_convert.h"
 #include "wifi_control.h"
@@ -1158,10 +1161,26 @@ static void build_viewer(lv_obj_t *screen)
 int main(void)
 {
     lv_display_t *display;
+    int sdl_display = 0;
     lv_init();
-    display = lv_linux_fbdev_create();
+#if defined(PHOTO_APP_VIDEO) && LV_USE_SDL
+    /* KMSDRM presents full-screen LVGL buffers through an accelerated GLES
+     * renderer. The existing fbdev path remains available on unsupported
+     * displays or when another process temporarily owns DRM master. */
+    setenv("SDL_VIDEODRIVER", "kmsdrm", 1);
+    setenv("SDL_RENDER_DRIVER", "opengles2", 1);
+    display = lv_sdl_window_create(PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
+    if(display) {
+        sdl_display = 1;
+        fprintf(stderr, "photo-viewer: video display SDL KMSDRM\n");
+    }
+    else fprintf(stderr, "photo-viewer: video display falling back to fbdev\n");
+#else
+    display = NULL;
+#endif
+    if(!display) display = lv_linux_fbdev_create();
     if(display == NULL) { fprintf(stderr, "photo-viewer: cannot create framebuffer display\n"); return 1; }
-    lv_linux_fbdev_set_file(display, "/dev/fb0");
+    if(!sdl_display) lv_linux_fbdev_set_file(display, "/dev/fb0");
     enable_touch();
     lv_obj_t *screen = lv_screen_active(); style_box(screen, 0x000000, 0);
     /* Scale the selected LVGL layout to the framebuffer size.  LVGL

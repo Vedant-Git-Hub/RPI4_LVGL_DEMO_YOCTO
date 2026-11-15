@@ -49,6 +49,9 @@ local_conf_header:
     # With only fb0 present, fbcon=map:1 deliberately maps consoles to the
     # nonexistent fb1 instead of overwriting the LVGL screen and cursor.
     CMDLINE_DEBUG = "fbcon=map:1 console=serial0,115200"
+    # vc4-kms-v3d adds an early enable_headphones=0 parameter. The later
+    # cmdline.txt parameter wins and makes the Pi 4's analogue card available.
+    CMDLINE_DEBUG:append = " snd_bcm2835.enable_headphones=1"
     WKS_FILE = "${@'sdimage-raspberrypi.wks' if d.getVar('PHOTO_VIEWER_BOOT_MEDIA') == 'sd' else 'usb-raspberrypi.wks'}"
 
     # Required by the Raspberry Pi 4 BSP for its onboard Wi-Fi/Bluetooth

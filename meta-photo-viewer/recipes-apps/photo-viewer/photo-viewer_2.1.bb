@@ -95,6 +95,10 @@ do_install() {
         install -m 0644 ${WORKDIR}/panel-simple.conf \
             ${D}${sysconfdir}/modules-load.d/photo-viewer-panel.conf
     fi
+    printf 'snd_bcm2835\n' > ${D}${sysconfdir}/modules-load.d/photo-viewer-audio.conf
+    install -d ${D}${sysconfdir}/modprobe.d
+    printf 'options snd_bcm2835 enable_headphones=1 enable_hdmi=0\n' > \
+        ${D}${sysconfdir}/modprobe.d/photo-viewer-audio.conf
 }
 
 RDEPENDS:${PN} += "lvgl kernel-module-panel-simple kernel-module-uvcvideo kernel-module-snd-bcm2835 imagemagick wpa-supplicant wpa-supplicant-cli ffmpeg alsa-utils-aplay alsa-utils-amixer"
@@ -107,6 +111,8 @@ FILES:${PN} += " \
     ${sysconfdir}/systemd/network/20-photo-viewer-wlan.network \
     ${sysconfdir}/photo-viewer-wpa.conf \
     ${sysconfdir}/modules-load.d/photo-viewer-panel.conf \
+    ${sysconfdir}/modules-load.d/photo-viewer-audio.conf \
+    ${sysconfdir}/modprobe.d/photo-viewer-audio.conf \
     ${sysconfdir}/systemd/system/getty@tty1.service \
 "
 

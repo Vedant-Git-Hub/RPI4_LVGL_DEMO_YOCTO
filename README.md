@@ -30,6 +30,9 @@ The experimental image enables the Pi 4 analogue audio device and sends video
 sound to the 3.5 mm jack. Settings → Volume adjusts the Headphones ALSA mixer
 and saves the level for later boots. The home screen shows Camera, Image
 Viewer, Settings, and Video Player as compact icons in alphabetical order.
+The boot command line explicitly enables `snd_bcm2835` headphones because the
+VC4 display overlay can supply an earlier `enable_headphones=0` parameter.
+Camera Back and completed camera captures return to the home screen.
 
 The browser page can upload, play, download, copy, rename, delete, and set
 display options for videos. MP4, MKV, MOV, WebM, AVI, M4V, MPEG, TS, 3GP,

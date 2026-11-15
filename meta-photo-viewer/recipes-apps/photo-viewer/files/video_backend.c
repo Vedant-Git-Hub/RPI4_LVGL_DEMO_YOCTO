@@ -141,8 +141,7 @@ static int spawn_audio(const char *path, double start_seconds,
         close(output[1]);
         dup2(output[0], STDIN_FILENO);
         close(output[0]);
-        int errors = open("/dev/null", O_WRONLY);
-        if(errors >= 0) { dup2(errors, STDERR_FILENO); close(errors); }
+        /* Keep ALSA errors in the service journal for headphone diagnosis. */
         char *const arguments[] = {"aplay", "-q", "-D", "sysdefault:CARD=Headphones", "-f", "S16_LE",
                                    "-c", "2", "-r", "48000", NULL};
         execv("/usr/bin/aplay", arguments);
@@ -154,8 +153,7 @@ static int spawn_audio(const char *path, double start_seconds,
         close(output[0]);
         dup2(output[1], STDOUT_FILENO);
         close(output[1]);
-        int errors = open("/dev/null", O_WRONLY);
-        if(errors >= 0) { dup2(errors, STDERR_FILENO); close(errors); }
+        /* Keep decoder errors in the service journal as well. */
         char start[32];
         snprintf(start, sizeof(start), "%.3f", start_seconds);
         char *const arguments[] = {"ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
@@ -275,7 +273,8 @@ video_playback_t *video_playback_start(const char *path, unsigned int width,
     if(!player->front || !player->back) goto fail;
     memset(player->front, 0, player->frame_size);
     pthread_mutex_init(&player->lock, NULL);
-    audio_volume_apply(audio_volume_load());
+    if(!audio_volume_apply(audio_volume_load()))
+        fprintf(stderr, "photo-viewer: Headphones mixer unavailable; check snd_bcm2835\n");
     player->video_pid = spawn_video(path, filter, start_seconds, &player->read_fd);
     if(player->video_pid < 0) goto fail_locked;
     /* Audio is optional: video continues when the Pi has no audio output. */

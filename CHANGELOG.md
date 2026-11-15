@@ -22,6 +22,9 @@ new full-screen controls and headphone audio still need hardware validation.
   mixer level from Settings → Volume.
 - Replace the large home tiles with compact icons ordered by app name.
 - Give image and video uploads separate progress and completion indicators.
+- Override the Pi 4 VC4 overlay's disabled-headphone boot parameter, load the
+  analogue sound driver, and keep ALSA errors in the service journal. Return
+  to Home when camera capture completes or the camera app exits.
 
 ## Stable version 2.1 — 2026-11-15
 

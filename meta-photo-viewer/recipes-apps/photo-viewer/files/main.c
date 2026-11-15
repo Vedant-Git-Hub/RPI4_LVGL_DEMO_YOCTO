@@ -452,17 +452,9 @@ static void camera_back(void)
 
 static void camera_saved(const char *name)
 {
-    char message[192];
-    show_gallery(NULL);
+    (void)name;
     scan_files();
-    for(int index = 0; index < file_count; index++) {
-        if(!strcmp(files[index].name, name)) {
-            select_file(index);
-            break;
-        }
-    }
-    snprintf(message, sizeof(message), "Saved %s to the image library.", name);
-    set_status(message);
+    show_drawer();
 }
 
 static void fullscreen_tapped(lv_event_t *event)
@@ -539,9 +531,9 @@ static void card_poll(lv_timer_t *timer)
 {
     (void)timer;
     if(refresh_card_mount()) {
-        if(!lv_obj_has_flag(viewer, LV_OBJ_FLAG_HIDDEN) ||
-           !lv_obj_has_flag(edit_screen, LV_OBJ_FLAG_HIDDEN) ||
-           camera_ui_is_open()) show_gallery(NULL);
+        if(camera_ui_is_open()) show_drawer();
+        else if(!lv_obj_has_flag(viewer, LV_OBJ_FLAG_HIDDEN) ||
+                !lv_obj_has_flag(edit_screen, LV_OBJ_FLAG_HIDDEN)) show_gallery(NULL);
         scan_files();
     }
 }

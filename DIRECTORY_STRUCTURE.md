@@ -39,12 +39,18 @@ photo_viewer/
 │   └── rpi4-photo-viewer-hdmi-net.yml
 ├── meta-photo-viewer/            Custom Yocto layer
 │   ├── conf/layer.conf           Register this layer with BitBake
-│   ├── recipes-apps/photo-viewer/
-│   │   ├── photo-viewer_2.1.bb   Boot assets and Linux configuration
-│   │   ├── photo-app-common.inc  Shared build inputs for app recipes
-│   │   ├── photo-{launcher,images,videos,settings,camera}_1.0.bb
-│   │   ├── photo-{web,camera-service}_1.0.bb
-│   │   └── files/               C sources, web page, service files
+│   ├── recipes-apps/
+│   │   ├── photo-common/         Shared LVGL shell, layout, build inputs
+│   │   ├── photo-launcher/       App drawer recipe and source
+│   │   ├── photo-images/         Image recipe and image support files
+│   │   ├── photo-videos/         Video recipe and player files
+│   │   ├── photo-settings/       Settings recipe and network/audio files
+│   │   ├── photo-camera/         Camera app recipe and UI files
+│   │   ├── photo-camera-service/ Camera service recipe and IPC files
+│   │   ├── photo-web/            Web service recipe, HTML, HTTP server
+│   │   ├── photo-splash/         One-time boot splash recipe and artwork
+│   │   ├── photo-wifi/           Wi-Fi service recipe and configuration
+│   │   └── photo-viewer/         Launcher integration and panel setup
 │   ├── recipes-core/images/
 │   │   └── photo-viewer-image.bb Define packages in the Pi root filesystem
 │   ├── recipes-graphics/lvgl/    LVGL recipe additions and patches
@@ -95,40 +101,24 @@ launcher waits for that child to exit, then redraws Home. The camera service
 opens the USB device on demand and serializes clients; it does not keep the
 camera streaming while no client needs it.
 
-```text
-meta-photo-viewer/recipes-apps/photo-viewer/files/
-├── launcher.c                    App drawer and child process supervisor
-├── main.c                        Shared LVGL app shell and screen entry points
-├── selection_state.c/.h          Selected image/video path IPC through /run
-├── display_layout.h               Display-dependent sizes and layout values
-├── camera_catalog.c              Camera mode discovery and saved mode
-├── camera_backend.c/.h            Video4Linux2 camera capture in service
-├── camera_service.c               Camera owner and Unix socket server
-├── camera_ipc_client.c            Local camera client
-├── camera_ipc.h                   Local camera protocol
-├── camera_ui.c/.h                 Camera screen and capture controls
-├── video_backend.c/.h            FFmpeg decoding, preview, and audio playback
-├── video_ui.c/.h                 Video library, player, and saved display settings
-├── audio_control.c/.h            Saved USB or 3.5 mm headphone volume
-├── image_convert.c/.h            Decode and prepare images for display
-├── image_settings.c/.h           Saved per-image rotation and Fit/Fill
-├── media_server.c/.h             HTTP image/video manager and live camera API
-├── web_server_main.c             Independent web server entry point
-├── index.html                    Browser interface
-├── boot_splash.c                 Paint the startup artwork to /dev/fb0
-├── boot-splash.bmp               Bold yellow welcome message
-├── wifi_control.c/.h             Wi-Fi scan and connection control
-├── hostname_settings.c/.h        Editable local hostname
-├── photo-viewer.service          Start the app drawer after framebuffer setup
-├── photo-web.service             Start the browser server
-├── photo-camera-service.service  Own the USB camera for app and web clients
-├── photo-viewer-splash.service   Show artwork before the drawer starts
-├── photo-viewer-wifi.service     Start Wi-Fi authentication
-├── photo-viewer-wpa.conf         Initial Wi-Fi configuration
-├── 20-photo-viewer-wlan.network  WLAN DHCP configuration
-├── panel-simple.conf            4.3-inch panel module loading
-└── Makefile                     Compile the application for the Pi
-```
+Each app or service directory contains its own `.bb` recipe and `files/`
+directory. `photo-common/` holds the sources currently compiled into multiple
+LVGL app binaries. The image and settings screens still share `main.c`; their
+image, network, and audio helpers live in their named directories.
+
+| Directory | Main files |
+| --- | --- |
+| `photo-common/` | `main.c`, `display_layout.h`, `selection_state.c`, shared `Makefile`, `photo-app-common.inc` |
+| `photo-launcher/` | `launcher.c` |
+| `photo-images/` | `image_convert.c`, `image_settings.c` |
+| `photo-videos/` | `video_ui.c`, `video_backend.c` |
+| `photo-settings/` | `wifi_control.c`, `hostname_settings.c`, `audio_control.c` |
+| `photo-camera/` | `camera_ui.c` |
+| `photo-camera-service/` | `camera_service.c`, V4L2 backend, camera IPC client and protocol, service unit |
+| `photo-web/` | `media_server.c`, `web_server_main.c`, `index.html`, service unit |
+| `photo-splash/` | `boot_splash.c`, welcome artwork, boot service unit |
+| `photo-wifi/` | `wpa_supplicant` service unit, initial configuration, DHCP network file |
+| `photo-viewer/` | Launcher service unit and panel configuration |
 
 The `.bb` recipes install these files into the Pi image; editing `files/`
 alone does not update an already deployed Pi. Rebuild and redeploy the image

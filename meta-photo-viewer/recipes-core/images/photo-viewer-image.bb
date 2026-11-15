@@ -13,6 +13,8 @@ IMAGE_INSTALL:append = " \
     photo-camera \
     photo-web \
     photo-camera-service \
+    photo-splash \
+    photo-wifi \
     iw \
     wpa-supplicant \
     avahi-daemon \

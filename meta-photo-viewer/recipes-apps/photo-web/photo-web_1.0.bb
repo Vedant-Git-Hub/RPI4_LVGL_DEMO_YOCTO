@@ -1,5 +1,5 @@
 SUMMARY = "Independent photo and video web server"
-require photo-app-common.inc
+require recipes-apps/photo-common/photo-app-common.inc
 SRC_URI:append = " file://photo-web.service file://index.html"
 inherit systemd
 SYSTEMD_SERVICE:${PN} = "photo-web.service"

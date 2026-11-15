@@ -4,6 +4,9 @@ PHOTO_VIEWER_7INCH ??= "0"
 DEPENDS = "lvgl libjpeg-turbo"
 inherit pkgconfig
 S = "${WORKDIR}"
+# Each executable has its own recipe and files/ directory. Sources shared by
+# several executables are unpacked from the sibling directories into WORKDIR.
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:${THISDIR}/../photo-common/files:${THISDIR}/../photo-launcher/files:${THISDIR}/../photo-images/files:${THISDIR}/../photo-videos/files:${THISDIR}/../photo-settings/files:${THISDIR}/../photo-camera/files:${THISDIR}/../photo-camera-service/files:${THISDIR}/../photo-web/files:"
 SRC_URI = " \
     file://Makefile file://display_layout.h file://main.c file://launcher.c \
     file://web_server_main.c file://camera_service.c \

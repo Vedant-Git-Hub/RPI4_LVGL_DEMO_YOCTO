@@ -4,78 +4,29 @@ PR = "r0"
 PHOTO_VIEWER_7INCH ??= "0"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
-DEPENDS = "lvgl libjpeg-turbo"
-
 SRC_URI = " \
-    file://main.c \
-    file://display_layout.h \
-    file://media_server.c \
-    file://media_server.h \
-    file://boot_splash.c \
-    file://boot-splash.bmp \
-    file://image_convert.c \
-    file://image_convert.h \
-    file://image_settings.c \
-    file://image_settings.h \
-    file://wifi_control.c \
-    file://wifi_control.h \
-    file://camera_backend.c \
-    file://camera_backend.h \
-    file://camera_ui.c \
-    file://camera_ui.h \
-    file://video_backend.c \
-    file://video_backend.h \
-    file://video_ui.c \
-    file://video_ui.h \
-    file://audio_control.c \
-    file://audio_control.h \
-    file://hostname_settings.c \
-    file://hostname_settings.h \
-    file://index.html \
-    file://Makefile \
     file://panel-simple.conf \
     file://photo-viewer.service \
-    file://photo-viewer-splash.service \
-    file://photo-viewer-wifi.service \
-    file://photo-viewer-wpa.conf \
-    file://20-photo-viewer-wlan.network \
 "
 
 S = "${WORKDIR}"
 
-inherit pkgconfig systemd
+inherit systemd
 
-SYSTEMD_SERVICE:${PN} = "photo-viewer.service photo-viewer-splash.service photo-viewer-wifi.service"
+SYSTEMD_SERVICE:${PN} = "photo-viewer.service"
 SYSTEMD_AUTO_ENABLE:${PN} = "enable"
 
-# This single-source Makefile has no generated configuration or clean target.
 do_configure[noexec] = "1"
-
-do_compile() {
-    oe_runmake photo-viewer-splash PHOTO_VIEWER_7INCH="${PHOTO_VIEWER_7INCH}"
-}
+do_compile[noexec] = "1"
 
 do_install() {
-    install -d ${D}${bindir}
-    install -m 0755 photo-viewer-splash ${D}${bindir}/photo-viewer-splash
-
     # Original photos live separately from application files.
     install -d ${D}/opt/photo-viewer/photos
     install -d ${D}/opt/photo-viewer/videos
-    install -d ${D}${datadir}/photo-viewer
-    install -m 0644 ${WORKDIR}/boot-splash.bmp ${D}${datadir}/photo-viewer/boot-splash.bmp
 
     install -d ${D}${systemd_system_unitdir}
     install -m 0644 ${WORKDIR}/photo-viewer.service \
         ${D}${systemd_system_unitdir}/photo-viewer.service
-    install -m 0644 ${WORKDIR}/photo-viewer-splash.service \
-        ${D}${systemd_system_unitdir}/photo-viewer-splash.service
-    install -m 0644 ${WORKDIR}/photo-viewer-wifi.service \
-        ${D}${systemd_system_unitdir}/photo-viewer-wifi.service
-    install -d ${D}${sysconfdir}/systemd/network
-    install -m 0644 ${WORKDIR}/20-photo-viewer-wlan.network \
-        ${D}${sysconfdir}/systemd/network/20-photo-viewer-wlan.network
-    install -m 0600 ${WORKDIR}/photo-viewer-wpa.conf ${D}${sysconfdir}/photo-viewer-wpa.conf
 
     # This is a full-screen appliance.  Mask the local virtual-console getty
     # so it cannot draw a login prompt over the LVGL framebuffer.  Do not
@@ -99,19 +50,13 @@ do_install() {
         ${D}${sysconfdir}/modprobe.d/photo-viewer-audio.conf
 }
 
-RDEPENDS:${PN} += "photo-launcher photo-web photo-camera-service lvgl kernel-module-panel-simple kernel-module-uvcvideo kernel-module-snd-bcm2835 kernel-module-snd-usb-audio imagemagick wpa-supplicant wpa-supplicant-cli ffmpeg alsa-utils-aplay alsa-utils-amixer"
+RDEPENDS:${PN} += "photo-launcher photo-web photo-camera-service photo-splash photo-wifi lvgl kernel-module-panel-simple kernel-module-uvcvideo kernel-module-snd-bcm2835 kernel-module-snd-usb-audio imagemagick wpa-supplicant wpa-supplicant-cli ffmpeg alsa-utils-aplay alsa-utils-amixer"
 RDEPENDS:${PN}:append = " ${@'kernel-module-panel-waveshare-dsi kernel-module-goodix-ts' if d.getVar('PHOTO_VIEWER_7INCH') == '1' else ''}"
 FILES:${PN} += " \
     /opt/photo-viewer/photos \
     /opt/photo-viewer/videos \
-    ${datadir}/photo-viewer/boot-splash.bmp \
-    ${sysconfdir}/systemd/network/20-photo-viewer-wlan.network \
-    ${sysconfdir}/photo-viewer-wpa.conf \
     ${sysconfdir}/modules-load.d/photo-viewer-panel.conf \
     ${sysconfdir}/modules-load.d/photo-viewer-audio.conf \
     ${sysconfdir}/modprobe.d/photo-viewer-audio.conf \
     ${sysconfdir}/systemd/system/getty@tty1.service \
 "
-
-CONFFILES:${PN} += "${sysconfdir}/photo-viewer-wpa.conf"
-

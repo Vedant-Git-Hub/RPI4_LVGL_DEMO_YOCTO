@@ -1,5 +1,5 @@
 SUMMARY = "USB camera owner and Unix socket IPC service"
-require photo-app-common.inc
+require recipes-apps/photo-common/photo-app-common.inc
 SRC_URI:append = " file://photo-camera-service.service"
 inherit systemd
 SYSTEMD_SERVICE:${PN} = "photo-camera-service.service"

@@ -11,6 +11,9 @@
 - Share the selected image or video path through `/run/photo-viewer` so the
   settings app can offer the corresponding saved edit controls.
 - Show the welcome splash only at boot, before the launcher appears.
+- Place each app and service recipe beside its own `files/` directory, with
+  cross-app sources in `photo-common/`. Give the splash and Wi-Fi services
+  their own recipes as well.
 
 - Add a four-app home screen for the image viewer, video player, settings, and
   camera. Move camera and settings entry points out of the image gallery.

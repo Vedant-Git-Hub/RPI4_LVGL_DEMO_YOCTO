@@ -1,3 +1,3 @@
 SUMMARY = "LVGL USB camera application"
-require photo-app-common.inc
+require recipes-apps/photo-common/photo-app-common.inc
 RDEPENDS:${PN} = "photo-camera-service"

@@ -18,6 +18,8 @@ generated locally and are not stored in Git.
 The experimental branch now builds the app drawer, image viewer, video player,
 settings, and camera as five separate executables and Yocto packages. The
 drawer starts each app as a child process and returns to Home when it exits.
+Each app and service has its own recipe and `files/` directory under
+`meta-photo-viewer/recipes-apps/`; cross-app code lives in `photo-common/`.
 The welcome splash is drawn once by the boot service; opening an app shows its
 screen directly.
 The browser server and USB camera owner run as independent systemd services;

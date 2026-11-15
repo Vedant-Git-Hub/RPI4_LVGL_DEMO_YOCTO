@@ -10,6 +10,7 @@
   a Unix socket client for a single service that owns the USB camera.
 - Share the selected image or video path through `/run/photo-viewer` so the
   settings app can offer the corresponding saved edit controls.
+- Show the welcome splash only at boot, before the launcher appears.
 
 - Add a four-app home screen for the image viewer, video player, settings, and
   camera. Move camera and settings entry points out of the image gallery.

@@ -18,6 +18,8 @@ generated locally and are not stored in Git.
 The experimental branch now builds the app drawer, image viewer, video player,
 settings, and camera as five separate executables and Yocto packages. The
 drawer starts each app as a child process and returns to Home when it exits.
+The welcome splash is drawn once by the boot service; opening an app shows its
+screen directly.
 The browser server and USB camera owner run as independent systemd services;
 they communicate over a local Unix socket. Wi-Fi authentication continues in
 its own `wpa_supplicant` service. Image and video selections use small files

@@ -1184,24 +1184,6 @@ int main(void)
     lv_obj_set_style_transform_pivot_y(layout, 0, 0);
     lv_obj_set_style_transform_scale(layout, scale, 0);
 
-    /* The pre-app service has already painted this BMP to fb0. Draw the same
-     * artwork with LVGL before creating the gallery, so initialization never
-     * reveals a partly built screen. */
-    lv_obj_t *splash = lv_obj_create(screen);
-    lv_obj_set_pos(splash, 0, 0);
-    lv_obj_set_size(splash, display_width, display_height);
-    style_box(splash, 0x000000, 0);
-    lv_obj_clear_flag(splash, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *splash_image = lv_image_create(splash);
-    lv_image_set_src(splash_image, "A:/usr/share/photo-viewer/boot-splash.bmp");
-    lv_image_set_pivot(splash_image, 380, 80);
-    uint32_t splash_scale_x = (uint32_t)display_width * 256 / 800;
-    uint32_t splash_scale_y = (uint32_t)display_height * 256 / 480;
-    lv_image_set_scale(splash_image, splash_scale_x < splash_scale_y ?
-                       splash_scale_x : splash_scale_y);
-    lv_obj_center(splash_image);
-    lv_refr_now(display);
-
  #if defined(PHOTO_APP_IMAGE) || defined(PHOTO_APP_SETTINGS)
     build_gallery(layout); build_viewer(layout); build_edit(layout);
     sd_boot = root_is_sd_card();
@@ -1233,7 +1215,6 @@ int main(void)
     if(!stat(PHOTO_DIR, &library_info)) photo_directory_mtime = library_info.st_mtim;
     if(!stat(VIDEO_DIR, &library_info)) video_directory_mtime = library_info.st_mtim;
     lv_timer_create(library_poll, 5000, NULL);
-    lv_obj_delete(splash);
 #if defined(PHOTO_APP_IMAGE)
     show_gallery(NULL);
 #elif defined(PHOTO_APP_VIDEO)

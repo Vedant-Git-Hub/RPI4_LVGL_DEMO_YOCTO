@@ -23,17 +23,25 @@ original media file is unchanged. Settings contains the existing network,
 camera, and image controls plus video settings after a video is selected.
 To edit a video on the Pi, select it in Video Player, tap Home, then open
 Settings → Video Settings. Save applies those choices on the next playback.
+Play Selected opens a full-screen player. Tap the video to reveal Back,
+Play/Pause, and the seek slider; controls fade while playing.
+
+The experimental image enables the Pi 4 analogue audio device and sends video
+sound to the 3.5 mm jack. Settings → Volume adjusts the Headphones ALSA mixer
+and saves the level for later boots. The home screen shows Camera, Image
+Viewer, Settings, and Video Player as compact icons in alphabetical order.
 
 The browser page can upload, play, download, copy, rename, delete, and set
 display options for videos. MP4, MKV, MOV, WebM, AVI, M4V, MPEG, TS, 3GP,
 WMV, and FLV names are accepted when FFprobe finds a video stream. Browser
 playback additionally depends on the browser's supported codecs. Network boot
 deployment preserves the video folder and its settings files.
+Image and video uploads have separate progress bars and completion messages.
 
 Build the 7-inch network image with `./build 7_display net`. Once the Pi is
 powered off, `./flash.sh net` deploys that completed build to the host's TFTP
 and NFS directories. The Pi then boots over Ethernet. This experimental
-branch has not yet been validated on the Pi hardware.
+branch's new player controls and headphone audio still need Pi testing.
 
 ### 7-inch DSI LCD (C) profile
 

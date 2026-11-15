@@ -27,6 +27,8 @@ SRC_URI = " \
     file://video_backend.h \
     file://video_ui.c \
     file://video_ui.h \
+    file://audio_control.c \
+    file://audio_control.h \
     file://hostname_settings.c \
     file://hostname_settings.h \
     file://index.html \
@@ -95,7 +97,7 @@ do_install() {
     fi
 }
 
-RDEPENDS:${PN} += "lvgl kernel-module-panel-simple kernel-module-uvcvideo imagemagick wpa-supplicant wpa-supplicant-cli ffmpeg alsa-utils-aplay"
+RDEPENDS:${PN} += "lvgl kernel-module-panel-simple kernel-module-uvcvideo kernel-module-snd-bcm2835 imagemagick wpa-supplicant wpa-supplicant-cli ffmpeg alsa-utils-aplay alsa-utils-amixer"
 RDEPENDS:${PN}:append = " ${@'kernel-module-panel-waveshare-dsi kernel-module-goodix-ts' if d.getVar('PHOTO_VIEWER_7INCH') == '1' else ''}"
 FILES:${PN} += " \
     /opt/photo-viewer/photos \

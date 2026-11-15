@@ -41,7 +41,7 @@
   <input id="original" type="file">
   <button id="upload">Upload</button>
 </section>
-<progress id="progress" max="100" value="0" hidden></progress>
+<progress id="image-progress" max="100" value="0" hidden></progress>
 <p id="status" role="status"></p>
 <h2>Stored images</h2>
 <ul id="files"></ul>
@@ -50,6 +50,7 @@
   <p>Upload MP4, MKV, MOV, WebM and other supported video files. Browser playback depends on the browser's codecs; the Pi player uses FFmpeg.</p>
   <input id="video-original" type="file" accept="video/*,.mkv,.avi,.ts,.wmv,.flv">
   <button id="video-upload">Upload video</button>
+  <progress id="video-progress" max="100" value="0" hidden></progress>
   <p id="video-status" role="status"></p>
   <video id="video-preview" controls playsinline hidden></video>
   <div id="video-editor" hidden>
@@ -63,7 +64,8 @@
 <script>
 const original = document.querySelector('#original');
 const status = document.querySelector('#status');
-const progress = document.querySelector('#progress');
+const imageProgress = document.querySelector('#image-progress');
+const videoProgress = document.querySelector('#video-progress');
 const files = document.querySelector('#files');
 const videos = document.querySelector('#videos');
 const videoPreview = document.querySelector('#video-preview');
@@ -263,20 +265,26 @@ async function refresh() {
   }
 }
 
-function send(blob, name, route = '/upload') {
+function send(blob, name, route, bar, message) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    progress.hidden = false;
-    progress.value = 0;
-    status.textContent = 'Uploading...';
+    bar.hidden = false;
+    bar.value = 0;
+    message.textContent = 'Uploading ' + name + '...';
     xhr.upload.onprogress = event => {
       if (event.lengthComputable) {
-        progress.value = 100 * event.loaded / event.total;
-        status.textContent = 'Uploading: ' + Math.round(progress.value) + '%';
+        bar.value = 100 * event.loaded / event.total;
+        message.textContent = `Uploading ${name}: ${Math.round(bar.value)}%`;
       }
     };
-    xhr.onload = () => xhr.status >= 200 && xhr.status < 300
-      ? resolve(xhr.responseText) : reject(Error(xhr.responseText || `HTTP ${xhr.status}`));
+    xhr.upload.onload = () => { message.textContent = 'Upload sent; validating ' + name + '...'; };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        bar.value = 100;
+        message.textContent = 'Upload complete: ' + name;
+        resolve(xhr.responseText);
+      } else reject(Error(xhr.responseText || `HTTP ${xhr.status}`));
+    };
     xhr.onerror = () => reject(Error('Network error'));
     xhr.open('PUT', route + '?name=' + encodeURIComponent(name));
     xhr.send(blob);
@@ -286,7 +294,7 @@ function send(blob, name, route = '/upload') {
 document.querySelector('#upload').onclick = async () => {
   const selected = original.files[0];
   if (!selected) return;
-  try { await send(selected, selected.name); status.textContent = 'Uploaded ' + selected.name; await refresh(); }
+  try { await send(selected, selected.name, '/upload', imageProgress, status); await refresh(); }
   catch (error) { status.textContent = error.message; }
 };
 
@@ -386,8 +394,7 @@ document.querySelector('#video-upload').onclick = async () => {
   const selected = document.querySelector('#video-original').files[0];
   if (!selected) return;
   try {
-    await send(selected, selected.name, '/video-upload');
-    videoStatus.textContent = 'Uploaded ' + selected.name;
+    await send(selected, selected.name, '/video-upload', videoProgress, videoStatus);
     await refreshVideos();
   } catch (error) { videoStatus.textContent = error.message; }
 };

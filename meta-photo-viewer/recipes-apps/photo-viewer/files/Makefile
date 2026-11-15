@@ -4,8 +4,8 @@ LDLIBS += $(shell pkg-config --libs lvgl) -ljpeg -lm
 
 all: photo-viewer photo-viewer-splash
 
-photo-viewer: main.c display_layout.h media_server.c media_server.h image_convert.c image_convert.h image_settings.c image_settings.h wifi_control.c wifi_control.h camera_backend.c camera_backend.h camera_ui.c camera_ui.h hostname_settings.c hostname_settings.h video_backend.c video_backend.h video_ui.c video_ui.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ main.c media_server.c image_convert.c image_settings.c wifi_control.c camera_backend.c camera_ui.c hostname_settings.c video_backend.c video_ui.c $(LDLIBS) -pthread
+photo-viewer: main.c display_layout.h media_server.c media_server.h image_convert.c image_convert.h image_settings.c image_settings.h wifi_control.c wifi_control.h camera_backend.c camera_backend.h camera_ui.c camera_ui.h hostname_settings.c hostname_settings.h video_backend.c video_backend.h video_ui.c video_ui.h audio_control.c audio_control.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ main.c media_server.c image_convert.c image_settings.c wifi_control.c camera_backend.c camera_ui.c hostname_settings.c video_backend.c video_ui.c audio_control.c $(LDLIBS) -pthread
 
 photo-viewer-splash: boot_splash.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ boot_splash.c

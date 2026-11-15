@@ -22,13 +22,17 @@ static void (*back_callback)(void), (*settings_back_callback)(void);
 static video_item_t items[VIDEO_LIMIT];
 static int item_count, selected = -1, paused;
 static lv_obj_t *screen, *list, *selected_label, *status_label, *frame_image;
-static lv_obj_t *pause_button, *pause_caption, *edit_screen, *edit_image;
+static lv_obj_t *edit_screen, *edit_image;
+static lv_obj_t *full_screen, *full_image, *full_controls, *full_pause_caption;
+static lv_obj_t *seek_slider, *seek_label;
 static lv_obj_t *edit_status, *edit_rotation, *fit_button, *fill_button;
 static lv_timer_t *frame_timer;
-static uint8_t *pixels, *edit_pixels;
-static lv_image_dsc_t frame_descriptor, edit_descriptor;
+static uint8_t *pixels, *edit_pixels, *full_pixels;
+static lv_image_dsc_t frame_descriptor, edit_descriptor, full_descriptor;
 static video_playback_t *player;
 static uint64_t last_sequence;
+static double duration;
+static uint32_t controls_shown_at;
 static image_settings_t editing;
 
 static void style(lv_obj_t *object, uint32_t color, int radius)
@@ -81,7 +85,7 @@ static void stop_playback(void)
 {
     if(player) { video_playback_stop(player); player = NULL; }
     paused = 0;
-    lv_label_set_text(pause_caption, "PAUSE");
+    if(full_pause_caption) lv_label_set_text(full_pause_caption, "PLAY");
     last_sequence = 0;
 }
 
@@ -162,18 +166,67 @@ static void back_pressed(lv_event_t *event)
     if(back_callback) back_callback();
 }
 
+static void show_controls(void)
+{
+    lv_obj_clear_flag(full_controls, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(full_controls);
+    controls_shown_at = lv_tick_get();
+}
+
+static void full_tapped(lv_event_t *event)
+{
+    (void)event;
+    show_controls();
+}
+
+static void full_back_pressed(lv_event_t *event)
+{
+    (void)event;
+    stop_playback();
+    lv_obj_add_flag(full_screen, LV_OBJ_FLAG_HIDDEN);
+    if(selected >= 0) show_selected_preview();
+}
+
+static void update_seek_label(double position)
+{
+    char caption[40];
+    int now = (int)position, total = (int)duration;
+    snprintf(caption, sizeof(caption), "%02d:%02d / %02d:%02d",
+             now / 60, now % 60, total / 60, total % 60);
+    lv_label_set_text(seek_label, caption);
+}
+
+static int play_at(double start_seconds)
+{
+    if(selected < 0 || selected >= item_count || !full_pixels) return 0;
+    stop_playback();
+    image_settings_t settings;
+    image_settings_load(items[selected].path, &settings);
+    duration = video_probe_duration(items[selected].path);
+    lv_slider_set_range(seek_slider, 0, duration > 0 ? (int)(duration + 0.5) : 100);
+    if(duration > 0 && start_seconds >= duration) start_seconds = 0;
+    char error[128] = {0};
+    player = video_playback_start(items[selected].path, PHOTO_SCREEN_WIDTH,
+                                  PHOTO_SCREEN_HEIGHT, &settings, start_seconds,
+                                  error, sizeof(error));
+    if(!player) {
+        status(error[0] ? error : "Could not start video playback.");
+        return 0;
+    }
+    lv_label_set_text(full_pause_caption, "PAUSE");
+    lv_slider_set_value(seek_slider, (int)start_seconds, LV_ANIM_OFF);
+    update_seek_label(start_seconds);
+    lv_obj_clear_flag(full_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(full_screen);
+    show_controls();
+    return 1;
+}
+
 static void play_pressed(lv_event_t *event)
 {
     (void)event;
     if(selected < 0 || selected >= item_count) { status("Select a video first."); return; }
-    stop_playback();
-    image_settings_t settings;
-    image_settings_load(items[selected].path, &settings);
-    char error[128] = {0};
-    player = video_playback_start(items[selected].path, FRAME_WIDTH, FRAME_HEIGHT,
-                                  &settings, error, sizeof(error));
-    if(!player) { status(error[0] ? error : "Could not start video playback."); return; }
-    status("Playing video. Tap PAUSE or STOP to control playback.");
+    if(play_at(0)) status("Video playing full screen. Tap to show controls.");
 }
 
 static void pause_pressed(lv_event_t *event)
@@ -182,26 +235,62 @@ static void pause_pressed(lv_event_t *event)
     if(!player) return;
     paused = !paused;
     video_playback_pause(player, paused);
-    lv_label_set_text(pause_caption, paused ? "RESUME" : "PAUSE");
+    lv_label_set_text(full_pause_caption, paused ? "PLAY" : "PAUSE");
     status(paused ? "Video paused." : "Video playing.");
+    show_controls();
 }
 
-static void stop_pressed(lv_event_t *event)
+static void full_pause_pressed(lv_event_t *event)
+{
+    if(player) pause_pressed(event);
+    else play_at(0);
+}
+
+static void seek_released(lv_event_t *event)
 {
     (void)event;
-    stop_playback();
-    status("Video stopped.");
+    if(duration <= 0) return;
+    double position = lv_slider_get_value(seek_slider);
+    int was_paused = paused;
+    if(play_at(position) && was_paused) {
+        video_playback_pause(player, 1);
+        paused = 1;
+        lv_label_set_text(full_pause_caption, "PLAY");
+    }
+    show_controls();
+}
+
+static void seek_touching(lv_event_t *event)
+{
+    (void)event;
+    controls_shown_at = lv_tick_get();
+    if(duration > 0) update_seek_label(lv_slider_get_value(seek_slider));
 }
 
 static void frame_tick(lv_timer_t *timer)
 {
     (void)timer;
-    if(!player || lv_obj_has_flag(screen, LV_OBJ_FLAG_HIDDEN)) return;
-    if(video_playback_copy_frame(player, pixels, frame_descriptor.data_size,
-                                 &last_sequence)) update_image(&frame_descriptor, frame_image);
+    if(!lv_obj_has_flag(full_screen, LV_OBJ_FLAG_HIDDEN) &&
+       !lv_obj_has_flag(full_controls, LV_OBJ_FLAG_HIDDEN) && !paused &&
+       !lv_obj_has_state(seek_slider, LV_STATE_PRESSED) &&
+       lv_tick_get() - controls_shown_at > 3000)
+        lv_obj_add_flag(full_controls, LV_OBJ_FLAG_HIDDEN);
+    if(!player || lv_obj_has_flag(full_screen, LV_OBJ_FLAG_HIDDEN)) return;
+    if(video_playback_copy_frame(player, full_pixels, full_descriptor.data_size,
+                                 &last_sequence)) update_image(&full_descriptor, full_image);
+    double position = video_playback_position(player);
+    if(duration > 0) {
+        if(position > duration) position = duration;
+        if(!lv_obj_has_state(seek_slider, LV_STATE_PRESSED)) {
+            lv_slider_set_value(seek_slider, (int)position, LV_ANIM_OFF);
+            update_seek_label(position);
+        }
+    }
     if(video_playback_finished(player)) {
         stop_playback();
-        status("Playback finished. Tap PLAY SELECTED to replay.");
+        if(duration > 0) lv_slider_set_value(seek_slider, (int)duration, LV_ANIM_OFF);
+        show_controls();
+        status("Playback finished. Tap PLAY to replay, or BACK to browse.");
     }
 }
 
@@ -277,6 +366,7 @@ void video_ui_open(void)
 void video_ui_close(void)
 {
     stop_playback();
+    lv_obj_add_flag(full_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(edit_screen, LV_OBJ_FLAG_HIDDEN);
 }
@@ -290,8 +380,11 @@ void video_ui_build(lv_obj_t *root, const char *directory,
     size_t frame_size = (size_t)FRAME_WIDTH * FRAME_HEIGHT * 3;
     pixels = calloc(1, frame_size);
     edit_pixels = calloc(1, frame_size);
+    size_t full_size = (size_t)PHOTO_SCREEN_WIDTH * PHOTO_SCREEN_HEIGHT * 3;
+    full_pixels = calloc(1, full_size);
     frame_descriptor.header.magic = LV_IMAGE_HEADER_MAGIC;
     edit_descriptor.header.magic = LV_IMAGE_HEADER_MAGIC;
+    full_descriptor.header.magic = LV_IMAGE_HEADER_MAGIC;
     frame_descriptor.header.cf = LV_COLOR_FORMAT_RGB888;
     frame_descriptor.header.w = edit_descriptor.header.w = FRAME_WIDTH;
     frame_descriptor.header.h = edit_descriptor.header.h = FRAME_HEIGHT;
@@ -300,6 +393,12 @@ void video_ui_build(lv_obj_t *root, const char *directory,
     frame_descriptor.data = pixels;
     edit_descriptor.header.cf = LV_COLOR_FORMAT_RGB888;
     edit_descriptor.data = edit_pixels;
+    full_descriptor.header.cf = LV_COLOR_FORMAT_RGB888;
+    full_descriptor.header.w = PHOTO_SCREEN_WIDTH;
+    full_descriptor.header.h = PHOTO_SCREEN_HEIGHT;
+    full_descriptor.header.stride = PHOTO_SCREEN_WIDTH * 3;
+    full_descriptor.data_size = full_size;
+    full_descriptor.data = full_pixels;
 
     screen = lv_obj_create(root);
     lv_obj_set_size(screen, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
@@ -337,15 +436,52 @@ void video_ui_build(lv_obj_t *root, const char *directory,
         frame_image = lv_image_create(window);
         lv_image_set_src(frame_image, &frame_descriptor);
     }
-    int controls_y = 105 + FRAME_HEIGHT;
-    pause_button = button(screen, "PAUSE", 0x1565C0, 288, controls_y, 125, 44,
-                          &pause_caption);
-    lv_obj_add_event_cb(pause_button, pause_pressed, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *stop = button(screen, "STOP", 0xE53935, 425, controls_y, 125, 44, NULL);
-    lv_obj_add_event_cb(stop, stop_pressed, LV_EVENT_CLICKED, NULL);
     status_label = label(screen, "Select a video, then tap PLAY SELECTED.",
                          0xFDD835, 288, PHOTO_SCREEN_HEIGHT - 38, FRAME_WIDTH);
     lv_obj_add_flag(screen, LV_OBJ_FLAG_HIDDEN);
+
+    full_screen = lv_obj_create(root);
+    lv_obj_set_size(full_screen, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
+    style(full_screen, 0x000000, 0);
+    lv_obj_add_flag(full_screen, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(full_screen, full_tapped, LV_EVENT_CLICKED, NULL);
+    if(full_pixels) {
+        full_image = lv_image_create(full_screen);
+        lv_image_set_src(full_image, &full_descriptor);
+        lv_obj_add_flag(full_image, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(full_image, full_tapped, LV_EVENT_CLICKED, NULL);
+    }
+    full_controls = lv_obj_create(full_screen);
+    lv_obj_set_size(full_controls, PHOTO_SCREEN_WIDTH, PHOTO_SCREEN_HEIGHT);
+    style(full_controls, 0x000000, 0);
+    lv_obj_set_style_bg_opa(full_controls, LV_OPA_TRANSP, 0);
+    lv_obj_clear_flag(full_controls, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *top = lv_obj_create(full_controls);
+    lv_obj_set_size(top, PHOTO_SCREEN_WIDTH, 66);
+    style(top, 0x07121C, 0);
+    lv_obj_set_style_bg_opa(top, LV_OPA_70, 0);
+    lv_obj_clear_flag(top, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *full_back = button(top, "BACK", 0x455A64,
+                                 PHOTO_SCREEN_WIDTH - 112, 10, 100, 44, NULL);
+    lv_obj_add_event_cb(full_back, full_back_pressed, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *bottom = lv_obj_create(full_controls);
+    lv_obj_set_pos(bottom, 0, PHOTO_SCREEN_HEIGHT - 100);
+    lv_obj_set_size(bottom, PHOTO_SCREEN_WIDTH, 100);
+    style(bottom, 0x07121C, 0);
+    lv_obj_set_style_bg_opa(bottom, LV_OPA_70, 0);
+    lv_obj_clear_flag(bottom, LV_OBJ_FLAG_CLICKABLE);
+    seek_slider = lv_slider_create(bottom);
+    lv_obj_set_pos(seek_slider, 20, 17);
+    lv_obj_set_size(seek_slider, PHOTO_SCREEN_WIDTH - 210, 14);
+    lv_slider_set_range(seek_slider, 0, 100);
+    lv_obj_add_event_cb(seek_slider, seek_released, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(seek_slider, seek_touching, LV_EVENT_PRESSING, NULL);
+    seek_label = label(bottom, "00:00 / 00:00", 0xFFFFFF,
+                       PHOTO_SCREEN_WIDTH - 175, 15, 165);
+    lv_obj_t *full_pause = button(bottom, "PAUSE", 0x1565C0,
+                                  20, 48, 130, 42, &full_pause_caption);
+    lv_obj_add_event_cb(full_pause, full_pause_pressed, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_flag(full_screen, LV_OBJ_FLAG_HIDDEN);
     frame_timer = lv_timer_create(frame_tick, 40, NULL);
 
     edit_screen = lv_obj_create(root);

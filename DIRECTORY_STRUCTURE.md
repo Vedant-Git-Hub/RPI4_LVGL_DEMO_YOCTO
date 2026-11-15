@@ -82,6 +82,7 @@ meta-photo-viewer/recipes-apps/photo-viewer/files/
 ├── camera_ui.c/.h                 Camera screen and capture controls
 ├── video_backend.c/.h            FFmpeg decoding, preview, and audio playback
 ├── video_ui.c/.h                 Video library, player, and saved display settings
+├── audio_control.c/.h            Saved 3.5 mm headphone volume and ALSA mixer
 ├── image_convert.c/.h            Decode and prepare images for display
 ├── image_settings.c/.h           Saved per-image rotation and Fit/Fill
 ├── media_server.c/.h             HTTP image/video manager and live camera API
@@ -117,6 +118,7 @@ and should not be confused with the source files above.
 | `/srv/photo-viewer-netboot/rootfs/` on the host | Pi root filesystem exported over NFS. |
 | `/opt/photo-viewer/photos/` on the Pi | Gallery photos; network boot stores them in the host NFS root. |
 | `/opt/photo-viewer/videos/` on the Pi | Uploaded videos and saved per-video display settings. |
+| `/opt/photo-viewer/volume.conf` on the Pi | Saved headphone volume, preserved by network deployment. |
 | `/opt/photo-viewer/camera.conf` on the Pi | Camera mode shared by the Pi screen and web controls. |
 | `/etc/photo-viewer-wpa.conf` on the Pi | Saved Wi-Fi profiles. |
 

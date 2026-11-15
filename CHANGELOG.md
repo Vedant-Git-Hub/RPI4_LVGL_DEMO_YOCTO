@@ -11,7 +11,17 @@
 - Include FFmpeg and ALSA playback utilities in the Yocto image.
 
 This work is isolated on `experimental/video-apps` and is not part of a
-stable release. Hardware playback and audio still require Pi validation.
+stable release. The project owner confirmed video playback on the Pi. The
+new full-screen controls and headphone audio still need hardware validation.
+
+### Follow-up player and audio changes
+
+- Open selected videos full screen with tap-to-show Back, Play/Pause, and seek
+  controls.
+- Route video audio to the Pi 4's 3.5 mm headphone jack and save a hardware
+  mixer level from Settings → Volume.
+- Replace the large home tiles with compact icons ordered by app name.
+- Give image and video uploads separate progress and completion indicators.
 
 ## Stable version 2.1 — 2026-11-15
 
